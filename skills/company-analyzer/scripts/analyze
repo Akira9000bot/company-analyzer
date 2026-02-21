@@ -1,11 +1,12 @@
 #!/bin/bash
 #
 # analyze - Simple Telegram Interface for Company Analyzer Skill
-# Usage: ./analyze <TICKER> [PROMPT_NUMBER]
+# Usage: ./analyze <TICKER> [PROMPT_NUMBER|"live"]
 #
 # Examples:
-#   ./analyze AAPL           # Full analysis (all 8 + synthesis)
-#   ./analyze AAPL 3         # Just AI Moat (or cache)
+#   ./analyze AAPL           # Full LIVE analysis (8 frameworks + thesis) ~$0.04
+#   ./analyze AAPL 3         # Single framework (or cache retrieve)
+#   ./analyze AAPL live      # Force live mode explicitly
 #
 
 set -euo pipefail
@@ -14,11 +15,12 @@ TICKER="${1:-}"
 PROMPT="${2:-}"
 
 if [ -z "$TICKER" ]; then
-    echo "Usage: ./analyze <TICKER> [PROMPT_NUMBER]"
+    echo "Usage: ./analyze <TICKER> [PROMPT_NUMBER|live]"
     echo ""
     echo "Examples:"
-    echo "  ./analyze AAPL         # Full analysis (8 frameworks + synthesis)"
-    echo "  ./analyze AAPL 3       # Just AI Moat framework"
+    echo "  ./analyze AAPL           # Full LIVE analysis (~$0.04)"
+    echo "  ./analyze AAPL 3         # AI Moat only (cache or generate)"
+    echo "  ./analyze AAPL live      # Force live mode"
     echo ""
     echo "Framework numbers:"
     echo "  1 = Phase Classification"
@@ -57,77 +59,52 @@ if [ ! -f "$DATA_FILE" ]; then
     echo ""
 fi
 
-# Mode: Single prompt
-if [ -n "$PROMPT" ]; then
-    FRAMEWORK_ID="${NUM_MAP[$PROMPT]:-}"
-    
-    if [ -z "$FRAMEWORK_ID" ]; then
-        echo "❌ Invalid prompt number: $PROMPT"
-        echo "Use 1-8 for specific frameworks"
-        exit 1
-    fi
-    
-    # Check cache first
-    CACHE_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${FRAMEWORK_ID}.md"
-    if [ -f "$CACHE_FILE" ]; then
-        echo "✅ Found cached analysis for $TICKER_UPPER (framework $PROMPT)"
-        echo ""
-        head -20 "$CACHE_FILE"
-        echo ""
-        echo "📄 Full output: $CACHE_FILE"
-        exit 0
-    fi
-    
-    # Run single framework
-    echo "🔍 Analyzing $TICKER_UPPER - Framework $PROMPT..."
-    "$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" "$FRAMEWORK_ID" 2>&1
+# Mode: Live full analysis (default when no prompt specified)
+if [ -z "$PROMPT" ] || [ "$PROMPT" = "live" ]; then
+    echo "🚀 Running FULL LIVE ANALYSIS for $TICKER_UPPER"
+    echo "   This will:"
+    echo "   • Analyze 8 frameworks via API (~$0.024)"
+    echo "   • Generate investment thesis (~$0.01)"
+    echo "   • Total cost: ~$0.034"
     echo ""
     
-    # Show result
-    if [ -f "$CACHE_FILE" ]; then
-        echo "✅ Analysis complete!"
-        echo ""
-        head -20 "$CACHE_FILE"
-        echo ""
-        echo "📄 Full output: $CACHE_FILE"
-    fi
-    
-    exit 0
+    # Run the live analysis script
+    "$SCRIPT_DIR/analyze-live.sh" "$TICKER_UPPER" --live
+    exit $?
 fi
 
-# Mode: Full analysis
-echo "🚀 Starting full analysis of $TICKER_UPPER..."
-echo "   This will run 8 frameworks + synthesis"
-echo "   Estimated cost: ~$0.03"
-echo ""
+# Mode: Single prompt
+FRAMEWORK_ID="${NUM_MAP[$PROMPT]:-}"
 
-# Check budget first
-if ! "$SCRIPT_DIR/budget_guard.sh" > /dev/null 2>&1; then
-    "$SCRIPT_DIR/budget_guard.sh"
+if [ -z "$FRAMEWORK_ID" ]; then
+    echo "❌ Invalid prompt number: $PROMPT"
+    echo "Use 1-8 for specific frameworks"
     exit 1
 fi
 
-# Run all 8 frameworks
-echo "📋 Phase 1: Running 8 frameworks..."
-"$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" full 2>&1 | grep -E "(Phase|Metrics|Moat|Sentiment|Growth|Business|Risk|\[Cost\]|complete)" || true
-echo ""
+# Check cache first
+CACHE_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${FRAMEWORK_ID}.md"
+if [ -f "$CACHE_FILE" ]; then
+    # Check if it's a live analysis or just template
+    if grep -q "Live Analysis Complete\|Live Generated" "$CACHE_FILE" 2>/dev/null; then
+        echo "✅ Found LIVE analysis for $TICKER_UPPER (framework $PROMPT)"
+        echo ""
+        cat "$CACHE_FILE"
+        exit 0
+    fi
+fi
 
-# Run synthesis
-echo "🧠 Phase 2: Synthesizing investment thesis..."
-"$SCRIPT_DIR/synthesize.sh" "$TICKER_UPPER" 2>&1 | tail -5
+# Run single framework LIVE
+echo "🔍 Analyzing $TICKER_UPPER - Framework $PROMPT (LIVE)..."
 echo ""
+"$SCRIPT_DIR/analyze-live.sh" "$TICKER_UPPER" --live 2>&1 | grep -A50 "\[0$PROMPT\]"
 
-# Show summary
-echo "======================================"
-echo "✅ ANALYSIS COMPLETE: $TICKER_UPPER"
-echo "======================================"
-echo ""
-echo "📁 Output files:"
-ls -1 "$OUTPUTS_DIR"/${TICKER_UPPER}_*.md 2>/dev/null | while read f; do
-    echo "   • $(basename "$f")"
-done
-echo ""
-echo "💰 Cost summary:"
-"$SCRIPT_DIR/cost_tracker.sh" 2>/dev/null | tail -3 || echo "   See: ./cost_tracker.sh"
-echo ""
-echo "🔗 Repository: https://github.com/Akira9000bot/company-analyzer"
+# Show result
+if [ -f "$CACHE_FILE" ]; then
+    echo ""
+    echo "✅ Analysis complete!"
+    echo ""
+    cat "$CACHE_FILE"
+fi
+
+exit 0
