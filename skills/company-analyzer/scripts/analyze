@@ -1,0 +1,133 @@
+#!/bin/bash
+#
+# analyze - Simple Telegram Interface for Company Analyzer Skill
+# Usage: ./analyze <TICKER> [PROMPT_NUMBER]
+#
+# Examples:
+#   ./analyze AAPL           # Full analysis (all 8 + synthesis)
+#   ./analyze AAPL 3         # Just AI Moat (or cache)
+#
+
+set -euo pipefail
+
+TICKER="${1:-}"
+PROMPT="${2:-}"
+
+if [ -z "$TICKER" ]; then
+    echo "Usage: ./analyze <TICKER> [PROMPT_NUMBER]"
+    echo ""
+    echo "Examples:"
+    echo "  ./analyze AAPL         # Full analysis (8 frameworks + synthesis)"
+    echo "  ./analyze AAPL 3       # Just AI Moat framework"
+    echo ""
+    echo "Framework numbers:"
+    echo "  1 = Phase Classification"
+    echo "  2 = Key Metrics Scorecard"
+    echo "  3 = AI Moat Viability"
+    echo "  4 = Strategic Moat Assessment"
+    echo "  5 = Price & Sentiment"
+    echo "  6 = Growth Drivers"
+    echo "  7 = Business Model"
+    echo "  8 = Risk Analysis"
+    exit 1
+fi
+
+TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
+
+# Map numbers to framework IDs
+declare -A NUM_MAP=(
+    ["1"]="01-phase"
+    ["2"]="02-metrics"
+    ["3"]="03-ai-moat"
+    ["4"]="04-strategic-moat"
+    ["5"]="05-sentiment"
+    ["6"]="06-growth"
+    ["7"]="07-business"
+    ["8"]="08-risk"
+)
+
+# Check if data exists, fetch if not
+DATA_FILE="/tmp/company-analyzer-cache/${TICKER_UPPER}_data.json"
+if [ ! -f "$DATA_FILE" ]; then
+    echo "📊 Fetching data for $TICKER_UPPER..."
+    "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" 2>&1 | tail -5
+    echo ""
+fi
+
+# Mode: Single prompt
+if [ -n "$PROMPT" ]; then
+    FRAMEWORK_ID="${NUM_MAP[$PROMPT]:-}"
+    
+    if [ -z "$FRAMEWORK_ID" ]; then
+        echo "❌ Invalid prompt number: $PROMPT"
+        echo "Use 1-8 for specific frameworks"
+        exit 1
+    fi
+    
+    # Check cache first
+    CACHE_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${FRAMEWORK_ID}.md"
+    if [ -f "$CACHE_FILE" ]; then
+        echo "✅ Found cached analysis for $TICKER_UPPER (framework $PROMPT)"
+        echo ""
+        head -20 "$CACHE_FILE"
+        echo ""
+        echo "📄 Full output: $CACHE_FILE"
+        exit 0
+    fi
+    
+    # Run single framework
+    echo "🔍 Analyzing $TICKER_UPPER - Framework $PROMPT..."
+    "$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" "$PROMPT" 2>&1
+    echo ""
+    
+    # Show result
+    if [ -f "$CACHE_FILE" ]; then
+        echo "✅ Analysis complete!"
+        echo ""
+        head -20 "$CACHE_FILE"
+        echo ""
+        echo "📄 Full output: $CACHE_FILE"
+    fi
+    
+    exit 0
+fi
+
+# Mode: Full analysis
+echo "🚀 Starting full analysis of $TICKER_UPPER..."
+echo "   This will run 8 frameworks + synthesis"
+echo "   Estimated cost: ~$0.03"
+echo ""
+
+# Check budget first
+if ! "$SCRIPT_DIR/budget_guard.sh" > /dev/null 2>&1; then
+    "$SCRIPT_DIR/budget_guard.sh"
+    exit 1
+fi
+
+# Run all 8 frameworks
+echo "📋 Phase 1: Running 8 frameworks..."
+"$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" full 2>&1 | grep -E "(Phase|Metrics|Moat|Sentiment|Growth|Business|Risk|\[Cost\]|complete)" || true
+echo ""
+
+# Run synthesis
+echo "🧠 Phase 2: Synthesizing investment thesis..."
+"$SCRIPT_DIR/synthesize.sh" "$TICKER_UPPER" 2>&1 | tail -5
+echo ""
+
+# Show summary
+echo "======================================"
+echo "✅ ANALYSIS COMPLETE: $TICKER_UPPER"
+echo "======================================"
+echo ""
+echo "📁 Output files:"
+ls -1 "$OUTPUTS_DIR"/${TICKER_UPPER}_*.md 2>/dev/null | while read f; do
+    echo "   • $(basename "$f")"
+done
+echo ""
+echo "💰 Cost summary:"
+"$SCRIPT_DIR/cost_tracker.sh" 2>/dev/null | tail -3 || echo "   See: ./cost_tracker.sh"
+echo ""
+echo "🔗 Repository: https://github.com/Akira9000bot/company-analyzer"
