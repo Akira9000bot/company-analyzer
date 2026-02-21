@@ -80,7 +80,7 @@ if [ -n "$PROMPT" ]; then
     
     # Run single framework
     echo "🔍 Analyzing $TICKER_UPPER - Framework $PROMPT..."
-    "$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" "$PROMPT" 2>&1
+    "$SCRIPT_DIR/analyze.sh" "$TICKER_UPPER" "$FRAMEWORK_ID" 2>&1
     echo ""
     
     # Show result
