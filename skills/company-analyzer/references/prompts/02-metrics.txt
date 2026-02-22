@@ -1,0 +1,14 @@
+ROLE: Financial Metrics Analyst
+TASK: Score key metrics using 🔴🟡🟢 framework
+DATA: Use provided data only — no additional research
+OUTPUT: Metrics table with color scores and brief justifications
+
+Score these metrics:
+- Revenue growth
+- Gross margin
+- Operating margin
+- FCF margin
+- Dollar net retention
+- Cash position
+
+Provide 1-2 sentence insight on overall health.
