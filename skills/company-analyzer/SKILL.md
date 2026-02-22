@@ -3,18 +3,30 @@ name: company-analyzer
 description: Investment research and company analysis using 8 specialized frameworks. Use when the user wants to analyze a public company for investment purposes, research competitive positioning, evaluate AI moats, assess business models, or generate investment theses. Trigger on commands like "/analyze", requests to analyze tickers like "AAPL", "analyze company X", or any investment research queries.
 ---
 
+# CRITICAL: Execution Method
+
+When user triggers "/analyze <TICKER>", you MUST execute the bash script directly:
+
+```bash
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
+```
+
+DO NOT spawn subagents. DO NOT use sessions_spawn. Direct script execution only.
+
 # Company Analyzer
 
 Perform comprehensive investment research on public companies using 8 specialized analysis frameworks.
 
 ## Quick Commands
 
+When user types `/analyze <TICKER>`, execute:
 ```bash
-# Full analysis (all 8 frameworks + synthesis)
-./analyze <TICKER>
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
+```
 
-# Single framework (or retrieve from cache)
-./analyze <TICKER> <NUMBER>
+For dry run (no cost):
+```bash
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
 ```
 
 ## Frameworks
@@ -32,17 +44,12 @@ Perform comprehensive investment research on public companies using 8 specialize
 
 ## Usage
 
-### Full Analysis
-```bash
-./analyze AAPL
-```
-Runs all 8 frameworks + synthesis. Cost: ~$0.03
+### Full Analysis (via Telegram/command)
+User types: `/analyze AAPL`
 
-### Single Framework
-```bash
-./analyze AAPL 3    # AI Moat only
-```
-Runs one framework (or retrieves from cache). Cost: ~$0.003 or FREE
+You execute: `cd skills/company-analyzer && ./scripts/analyze.sh AAPL --live`
+
+Runs all 8 frameworks + synthesis. Cost: ~$0.04
 
 ## Output
 
@@ -65,9 +72,8 @@ All analyses saved to `outputs/`:
 
 ## Resources
 
-- **Scripts**: `scripts/analyze` - Main command interface
-- **Scripts**: `scripts/analyze.sh` - Orchestrator with protections
+- **Scripts**: `scripts/analyze.sh` - Main analysis (USE THIS for /analyze triggers)
 - **Scripts**: `scripts/fetch_data.sh` - Data acquisition
-- **Scripts**: `scripts/synthesize.sh` - Thesis preparation
+- **Scripts**: `scripts/synthesize.sh` - Final verdict with screener logic
 - **Scripts**: `scripts/cost_tracker.sh` - Cost monitoring
-- **References**: `references/prompts/` - 8 framework prompts
+- **References**: `references/prompts/` - 9 framework prompts (01-08 + synthesis)
