@@ -6,6 +6,13 @@
 
 set -euo pipefail
 
+# Load API key from OpenClaw auth profiles
+AUTH_PROFILES="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
+if [ -f "$AUTH_PROFILES" ]; then
+    MOONSHOT_API_KEY=$(jq -r '.profiles["moonshot:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
+    export MOONSHOT_API_KEY
+fi
+
 TICKER="${1:-}"
 LIVE="${2:-}"
 TELEGRAM_FLAG="${3:-}"
@@ -120,35 +127,12 @@ send_telegram_chunked() {
 # ============================================
 # ARCHITECTURE UPDATE 1: Create Shared Cache
 # ============================================
+# NOTE: Moonshot caching API currently has model compatibility issues.
+# Using fallback mode - context is included in each request instead.
 create_shared_cache() {
-    local ticker_data="$1"
-    
-    echo "📦 Creating shared context cache..."
-    
-    # Create cache object with 10-minute TTL
-    local cache_res=$(curl -s -X POST "https://api.moonshot.ai/v1/caching" \
-        -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"model\": \"kimi-k2.5\",
-            \"messages\": [
-                {
-                    \"role\": \"system\",
-                    \"content\": \"You are a financial analyst. Company data: $ticker_data\"
-                }
-            ],
-            \"ttl\": 600
-        }")
-    
-    CACHE_ID=$(echo "$cache_res" | jq -r '.id // empty')
-    
-    if [ -z "$CACHE_ID" ] || [ "$CACHE_ID" == "null" ]; then
-        echo "  ⚠️  Cache creation failed, falling back to direct calls"
-        CACHE_ID=""
-        return 1
-    fi
-    
-    echo "  ✅ Cache established: ${CACHE_ID:0:20}..."
+    echo "📦 Shared cache: using fallback mode (direct calls with context)"
+    CACHE_ID=""
+    # Return 0 to continue script execution (fallback is acceptable)
     return 0
 }
 
@@ -158,34 +142,20 @@ run_framework() {
     local ticker="$2"
     local framework_prompt=$(cat "$PROMPTS_DIR/$fw_id.txt" 2>/dev/null || echo "Analyze $fw_id")
     
-    local response
-    if [ -n "$CACHE_ID" ]; then
-        # Use cached context
-        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
-            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"model\": \"kimi-k2.5\",
-                \"cache_id\": \"$CACHE_ID\",
-                \"messages\": [
-                    {\"role\": \"user\", \"content\": \"$framework_prompt\"}
-                ]
-            }")
-    else
-        # Fallback: include full context
-        local full_prompt="Company: $ticker
-
-$framework_prompt"
-        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
-            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"model\": \"kimi-k2.5\",
-                \"messages\": [
-                    {\"role\": \"user\", \"content\": \"$full_prompt\"}
-                ]
-            }")
-    fi
+    # Use printf to safely format the prompt
+    local full_prompt
+    printf -v full_prompt 'Company: %s\n\n%s' "$ticker" "$framework_prompt"
+    
+    # Build JSON properly using jq
+    local json_payload=$(jq -n \
+        --arg model "kimi-k2.5" \
+        --arg content "$full_prompt" \
+        '{model: $model, messages: [{role: "user", content: $content}]}')
+    
+    local response=$(curl -s --max-time 60 -X POST "https://api.moonshot.ai/v1/chat/completions" \
+        -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
     
     # Extract content and usage
     local content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
@@ -230,33 +200,22 @@ run_synthesis() {
 3. FINAL VERDICT: BUY / HOLD / SELL with conviction level (High/Medium/Low)"
     fi
     
-    local synthesis_message="$synthesis_prompt\n\n=== 8 FRAMEWORK ANALYSES ===\n\n$all_outputs"
+    local synthesis_message="$synthesis_prompt
+
+=== 8 FRAMEWORK ANALYSES ===
+
+$all_outputs"
     
-    local response
-    if [ -n "$CACHE_ID" ]; then
-        # Use SAME cache_id as frameworks - no data resend
-        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
-            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"model\": \"kimi-k2.5\",
-                \"cache_id\": \"$CACHE_ID\",
-                \"messages\": [
-                    {\"role\": \"user\", \"content\": \"$synthesis_message\"}
-                ]
-            }")
-    else
-        # Fallback
-        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
-            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"model\": \"kimi-k2.5\",
-                \"messages\": [
-                    {\"role\": \"user\", \"content\": \"$synthesis_message\"}
-                ]
-            }")
-    fi
+    # Build JSON properly using jq
+    local json_payload=$(jq -n \
+        --arg model "kimi-k2.5" \
+        --arg content "$synthesis_message" \
+        '{model: $model, messages: [{role: "user", content: $content}]}')
+    
+    local response=$(curl -s --max-time 60 -X POST "https://api.moonshot.ai/v1/chat/completions" \
+        -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
     
     local content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
     local input_tokens=$(echo "$response" | jq -r '.usage.prompt_tokens // 0')
@@ -315,18 +274,15 @@ mkdir -p "$OUTPUTS_DIR"
 create_shared_cache "$TICKER_DATA"
 
 echo ""
-echo "📋 Phase 1: Analyzing 8 Frameworks (Parallel)..."
+echo "📋 Phase 1: Analyzing 8 Frameworks..."
 echo ""
 
-# Run 8 frameworks in parallel
+# Run 8 frameworks sequentially (more reliable)
 for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
-    (
-        run_framework "$fw_id" "$TICKER_UPPER" > /dev/null 2>&1
-    ) &
+    echo "  🔄 Running $fw_id..."
+    run_framework "$fw_id" "$TICKER_UPPER" > /dev/null 2>&1
+    echo "  ✅ $fw_id complete"
 done
-
-# Wait for all frameworks
-wait
 echo "  ✅ All 8 frameworks complete"
 
 # Run synthesis using same cache
