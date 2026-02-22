@@ -1,131 +1,141 @@
 #!/bin/bash
 #
-# synthesize-live.sh - Generate live investment thesis via API
+# synthesize.sh - Generate final synthesis from framework outputs
+# Usage: ./synthesize.sh <TICKER> [--live]
 #
+
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
+PROMPTS_DIR="$SKILL_DIR/references/prompts"
+
+# Source libraries
+source "$SCRIPT_DIR/lib/cache.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/cost-tracker.sh" 2>/dev/null || true
+source "$SCRIPT_DIR/lib/api-client.sh" 2>/dev/null || true
 
 TICKER="${1:-}"
 LIVE="${2:-}"
 
-[ -z "$TICKER" ] && { echo "Usage: ./synthesize-live.sh <TICKER> [--live]"; exit 1; }
+[ -z "$TICKER" ] && { echo "Usage: $0 <TICKER> [--live]"; exit 1; }
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
-INPUT_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_synthesis_input.txt"
-OUTPUT_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_SYNTHESIS_live.md"
 
-if [ ! -f "$INPUT_FILE" ]; then
-    echo "Error: Synthesis input not found. Run: ./synthesize.sh $TICKER_UPPER"
+# Framework definitions
+declare -A FRAMEWORKS=(
+    ["01-phase"]='Phase Classification'
+    ["02-metrics"]='Key Metrics Scorecard'
+    ["03-ai-moat"]='AI Moat Viability'
+    ["04-strategic-moat"]='Strategic Moat Assessment'
+    ["05-sentiment"]='Price & Sentiment'
+    ["06-growth"]='Growth Drivers'
+    ["07-business"]='Business Model'
+    ["08-risk"]='Risk Analysis'
+)
+
+# Check if framework outputs exist
+echo "Checking for framework outputs..."
+MISSING=()
+for fw_id in "${!FRAMEWORKS[@]}"; do
+    FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+    if [ ! -f "$FW_FILE" ]; then
+        MISSING+=("$fw_id")
+    fi
+done
+
+if [ ${#MISSING[@]} -gt 0 ]; then
+    echo "⚠️  Missing framework outputs: ${MISSING[*]}"
+    echo "   Run: ./analyze-parallel.sh $TICKER_UPPER --live"
     exit 1
 fi
 
+echo "✅ All 8 framework outputs found"
+
+# Dry run mode
 if [ "$LIVE" != "--live" ]; then
-    echo "DRY RUN MODE (add --live for actual API call)"
     echo ""
-    echo "Input: $INPUT_FILE"
-    echo "Output: $OUTPUT_FILE"
-    echo "Model: moonshot/kimi-k2.5"
-    echo "Tokens: ~800 input / ~600 output"
+    echo "DRY RUN MODE"
+    echo ""
+    echo "To generate synthesis: $0 $TICKER_UPPER --live"
     echo "Cost: ~$0.01"
-    echo ""
-    head -20 "$INPUT_FILE"
     exit 0
 fi
 
-# Live mode - generate thesis
-echo "Generating live investment thesis for $TICKER_UPPER..."
+# Collect all framework outputs
+echo ""
+echo "🧠 Generating synthesis..."
 
-# Check OpenClaw CLI
-if ! command -v openclaw &> /dev/null; then
-    echo "⚠️  OpenClaw CLI not found"
-    echo "Creating template output..."
-    
-    cat > "$OUTPUT_FILE" <<EOF
-# Investment Thesis: $TICKER_UPPER (LIVE)
+ALL_OUTPUTS=""
+for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
+    FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+    if [ -f "$FW_FILE" ]; then
+        ALL_OUTPUTS="${ALL_OUTPUTS}### ${FRAMEWORKS[$fw_id]} ###
+$(cat "$FW_FILE")
 
-**Status:** TEMPLATE (Connect OpenClaw CLI for live generation)
-**Model:** moonshot/kimi-k2.5
-**Cost:** ~$0.01
+"
+    fi
+done
 
-## Verdict
-PENDING
-
-## Executive Summary
-[To be generated with live API call]
-
-## Bull Case
-- [Point 1]
-- [Point 2]
-- [Point 3]
-
-## Bear Case
-- [Risk 1]
-- [Risk 2]
-
-## Contradictions
-[Flag any framework disagreements]
-
-## Primary Risk
-[Single biggest threat]
-
-## Confidence Level
-Medium
-
----
-*Template generated: $(date)*
-*Note: Run with OpenClaw CLI connected for actual thesis generation*
-EOF
-    
-    echo ""
-    echo "✅ Template created: $OUTPUT_FILE"
-    echo "   Connect OpenClaw CLI and re-run for live generation."
-    exit 0
+# Read synthesis prompt
+SYNTHESIS_PROMPT=$(cat "$PROMPTS_DIR/09-synthesis.txt" 2>/dev/null)
+if [ -z "$SYNTHESIS_PROMPT" ]; then
+    SYNTHESIS_PROMPT="You are a strategic investment screener. Analyze the following 8 framework outputs and provide a BUY/HOLD/SELL verdict."
 fi
 
-# If OpenClaw CLI exists, generate actual thesis
-# This would call the actual API - currently template only
-echo "Live generation would happen here with API call"
-echo "Creating placeholder..."
+SYNTHESIS_MESSAGE="$SYNTHESIS_PROMPT
 
-cat > "$OUTPUT_FILE" <<EOF
-# Investment Thesis: $TICKER_UPPER (LIVE)
+=== 8 FRAMEWORK ANALYSES ===
 
-**Status:** GENERATED
-**Model:** moonshot/kimi-k2.5
-**Input Tokens:** ~800
-**Output Tokens:** ~600
-**Cost:** ~$0.01
+$ALL_OUTPUTS"
 
-## Verdict
-BUY
+# Call API for synthesis (use libraries if available)
+if type call_moonshot_api &>/dev/null; then
+    SYNTHESIS_RESPONSE=$(call_moonshot_api "$SYNTHESIS_MESSAGE")
+    
+    if [ $? -ne 0 ]; then
+        echo "❌ Synthesis API call failed"
+        exit 1
+    fi
+    
+    SYNTHESIS_CONTENT=$(extract_content "$SYNTHESIS_RESPONSE")
+    read SYNTH_INPUT SYNTH_OUTPUT <<< $(extract_usage "$SYNTHESIS_RESPONSE")
+    log_cost "$TICKER_UPPER" "09-synthesis" "$SYNTH_INPUT" "$SYNTH_OUTPUT"
+else
+    # Fallback to direct curl
+    echo "  (Using direct API call)"
+    
+    AUTH_PROFILES="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
+    MOONSHOT_API_KEY=$(jq -r '.profiles["moonshot:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
+    
+    if [ -z "$MOONSHOT_API_KEY" ]; then
+        echo "❌ No API key found"
+        exit 1
+    fi
+    
+    json_payload=$(jq -n \
+        --arg model "kimi-k2.5" \
+        --arg content "$SYNTHESIS_MESSAGE" \
+        '{model: $model, messages: [{role: "user", content: $content}]}')
+    
+    response=$(curl -s --max-time 60 -X POST "https://api.moonshot.ai/v1/chat/completions" \
+        -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$json_payload")
+    
+    SYNTHESIS_CONTENT=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+fi
 
-## Executive Summary
-Strong fundamentals with expanding AI moat. Fintech segment showing 45% growth. Currency risk manageable given market position.
-
-## Bull Case
-- Dominant market position in LatAm e-commerce
-- Fintech (Mercado Pago) driving margin expansion
-- Logistics network creating defensible moat
-
-## Bear Case
-- Currency exposure in Argentina/Brazil
-- Regulatory risks in payments
-- Competition from Amazon
-
-## Contradictions
-Growth framework shows "New-focused" but strategic moat suggests mature ecosystem.
-
-## Primary Risk
-Currency devaluation in key markets
-
-## Confidence Level
-High
-
----
-*Generated: $(date)*
-EOF
+# Save synthesis
+echo "$SYNTHESIS_CONTENT" > "$OUTPUTS_DIR/${TICKER_UPPER}_synthesis.md"
 
 echo ""
-echo "✅ Live thesis generated: $OUTPUT_FILE"
+echo "======================================"
+echo "  SYNTHESIS COMPLETE"
+echo "======================================"
+echo ""
+echo "$SYNTHESIS_CONTENT"
+echo ""
+echo "======================================"
+echo "Saved to: $OUTPUTS_DIR/${TICKER_UPPER}_synthesis.md"

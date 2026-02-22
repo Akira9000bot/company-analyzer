@@ -8,26 +8,36 @@ description: Investment research and company analysis using 8 specialized framew
 When user triggers "/analyze <TICKER>", you MUST execute the bash script directly:
 
 ```bash
-cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
+cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER> --live
 ```
 
 DO NOT spawn subagents. DO NOT use sessions_spawn. Direct script execution only.
 
 # Company Analyzer
 
-Perform comprehensive investment research on public companies using 8 specialized analysis frameworks.
+Perform comprehensive investment research on public companies using 8 specialized analysis frameworks with **parallel execution**, **response caching**, and **cost controls**.
 
 ## Quick Commands
 
 When user types `/analyze <TICKER>`, execute:
 ```bash
-cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
+cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER> --live
 ```
 
 For dry run (no cost):
 ```bash
-cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
+cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER>
 ```
+
+## Features
+
+| Feature | Benefit |
+|---------|---------|
+| **Parallel Execution** | 8 frameworks run simultaneously (~4-6s vs ~20s sequential) |
+| **Response Caching** | Re-analyzing same ticker uses cache = ~50-80% cost savings |
+| **Per-Framework Budget** | Early exit if daily budget exceeded mid-analysis |
+| **Alpha Vantage** | Price data (P/E, market cap) when API key configured |
+| **Retry Logic** | 3 retries with exponential backoff on API failures |
 
 ## Frameworks
 
@@ -47,33 +57,89 @@ cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
 ### Full Analysis (via Telegram/command)
 User types: `/analyze AAPL`
 
-You execute: `cd skills/company-analyzer && ./scripts/analyze.sh AAPL --live`
+You execute: `cd skills/company-analyzer && ./scripts/analyze-parallel.sh AAPL --live`
 
-Runs all 8 frameworks + synthesis. Cost: ~$0.04
+Runs all 8 frameworks in parallel + synthesis. Cost: ~$0.04 (or $0 if cached).
+
+### Data Fetching
+Before analysis, fetch company data:
+```bash
+cd skills/company-analyzer && ./scripts/fetch_data.sh AAPL
+```
+
+This pulls:
+- Financial metrics from SEC EDGAR
+- Price data from Alpha Vantage (if API key configured)
+
+### Run Single Framework
+```bash
+cd skills/company-analyzer && ./scripts/run-framework.sh AAPL 03-ai-moat --live
+```
+
+## Architecture
+
+### Scripts
+- **`analyze-parallel.sh`** - Main orchestrator (parallel execution)
+- **`run-framework.sh`** - Single framework runner with caching
+- **`fetch_data.sh`** - Data acquisition (SEC + Alpha Vantage)
+- **`lib/cache.sh`** - Response caching utilities
+- **`lib/cost-tracker.sh`** - Budget management
+- **`lib/api-client.sh`** - Moonshot API with retry logic
+
+### Caching
+- Location: `/tmp/company-analyzer-cache/responses/`
+- TTL: 7 days
+- Key: `TICKER_FWID_PROMPT_HASH`
+- Cached responses show: `💰 framework: $0.0000 (cached)`
+
+### Cost Protection
+- Daily budget: $0.10 (hard stop)
+- Checked before each framework
+- Budget exhausted mid-run = graceful exit with partial results
+
+## Configuration
+
+### Alpha Vantage (Price Data)
+Add to `~/.openclaw/agents/main/agent/auth-profiles.json`:
+```json
+{
+  "profiles": {
+    "alpha-vantage:default": {
+      "key": "YOUR_API_KEY"
+    }
+  }
+}
+```
+
+Free tier: 25 API calls/day
+
+### Moonshot API
+Already configured via OpenClaw auth profiles.
 
 ## Output
 
-All analyses saved to `outputs/`:
+All analyses saved to `assets/outputs/`:
 - `TICKER_01-phase.md` through `TICKER_08-risk.md`
-- `TICKER_SYNTHESIS.md` - Investment thesis
+- `TICKER_synthesis.md` - Investment thesis
 
-## Cost Protection
+## Performance
 
-- Daily budget: $0.10 (hard stop)
-- Per framework: 500 token max (auto-truncate)
-- Circuit breaker: 2 failures max
-- Cache retrieval: FREE
+| Mode | Time | Cost |
+|------|------|------|
+| Sequential (old) | ~20s | $0.04 |
+| Parallel (new) | ~5s | $0.04 |
+| Cached | ~1s | $0.00 |
 
-## Data Sources
+## Troubleshooting
 
-1. Company IR pages (primary)
-2. SEC EDGAR filings (fallback)
-3. Cached data: `/tmp/company-analyzer-cache/`
+**"Budget exceeded" error:**
+- Check daily spend: `cat /tmp/company-analyzer-costs.log`
+- Wait until tomorrow, or clear log to reset (not recommended)
 
-## Resources
+**"Alpha Vantage rate limit":**
+- Free tier = 25 calls/day
+- Price data falls back to N/A, analysis continues with SEC data only
 
-- **Scripts**: `scripts/analyze.sh` - Main analysis (USE THIS for /analyze triggers)
-- **Scripts**: `scripts/fetch_data.sh` - Data acquisition
-- **Scripts**: `scripts/synthesize.sh` - Final verdict with screener logic
-- **Scripts**: `scripts/cost_tracker.sh` - Cost monitoring
-- **References**: `references/prompts/` - 9 framework prompts (01-08 + synthesis)
+**Framework failures:**
+- Individual frameworks can fail without stopping entire analysis
+- Check `assets/outputs/` for partial results
