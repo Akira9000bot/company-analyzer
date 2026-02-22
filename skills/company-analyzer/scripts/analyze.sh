@@ -1,32 +1,37 @@
 #!/bin/bash
 #
-# Company Analyzer v6.4 - Protected Orchestrator
-# With budget guard, cost tracking, and output validation
+# analyze.sh - Company Analysis with Live API Execution
+# Usage: ./analyze.sh <TICKER> [--live] [--telegram <CHAT_ID>]
 #
 
 set -euo pipefail
 
 TICKER="${1:-}"
-ANALYSIS_TYPE="${2:-full}"
+LIVE="${2:-}"
+TELEGRAM_FLAG="${3:-}"
+TELEGRAM_CHAT_ID="${4:-}"
 
-# Cost protection settings
-DAILY_BUDGET=0.10           # $0.10 daily limit
-MAX_TOKENS_PER_FRAMEWORK=500
-MAX_RETRIES=1
-CIRCUIT_BREAKER=2           # Stop after 2 failures
+if [ -z "$TICKER" ]; then
+    echo "Usage: ./analyze.sh <TICKER> [--live] [--telegram <CHAT_ID>]"
+    echo ""
+    echo "Examples:"
+    echo "  ./analyze.sh AAPL --live                      # Full live analysis"
+    echo "  ./analyze.sh AAPL --live --telegram 123456    # With Telegram delivery"
+    echo "  ./analyze.sh AAPL                             # Dry run (no cost)"
+    exit 1
+fi
 
-# Models
-MODEL_PRIMARY="moonshot/kimi-k2.5"
-MODEL_FALLBACK="google/gemini-2.0-flash-lite"
-
-# Paths
+TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 PROMPTS_DIR="$SKILL_DIR/references/prompts"
 COST_LOG="/tmp/company-analyzer-costs.log"
+CACHE_ID=""
 
-# Framework definitions
+# Telegram config
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+
 declare -A FRAMEWORKS=(
     ["01-phase"]='Phase Classification'
     ["02-metrics"]='Key Metrics Scorecard'
@@ -38,215 +43,325 @@ declare -A FRAMEWORKS=(
     ["08-risk"]='Risk Analysis'
 )
 
-declare -A ALIASES=(
-    ["01"]="01-phase"
-    ["02"]="02-metrics"
-    ["03"]="03-ai-moat"
-    ["04"]="04-strategic-moat"
-    ["05"]="05-sentiment"
-    ["06"]="06-growth"
-    ["07"]="07-business"
-    ["08"]="08-risk"
-    ["01-phase"]="01-phase"
-    ["02-metrics"]="02-metrics"
-    ["03-ai-moat"]="03-ai-moat"
-    ["04-strategic-moat"]="04-strategic-moat"
-    ["05-sentiment"]="05-sentiment"
-    ["06-growth"]="06-growth"
-    ["07-business"]="07-business"
-    ["08-risk"]="08-risk"
-    ["phase"]="01-phase"
-    ["metrics"]="02-metrics"
-    ["ai-moat"]="03-ai-moat"
-    ["strategic"]="04-strategic-moat"
-    ["sentiment"]="05-sentiment"
-    ["growth"]="06-growth"
-    ["business"]="07-business"
-    ["risk"]="08-risk"
-)
-
-show_usage() {
-    echo "Usage: ./analyze.sh <TICKER> [FRAMEWORK]"
-    echo ""
-    echo "Protection Settings:"
-    echo "  Daily budget: \$${DAILY_BUDGET}"
-    echo "  Max tokens per framework: ${MAX_TOKENS_PER_FRAMEWORK}"
-    echo "  Max retries: ${MAX_RETRIES}"
-    echo ""
-    echo "Individual Frameworks: 01-08 or names"
-    echo "Preset Groups: full, moat, quick"
-    echo ""
-    echo "Examples:"
-    echo "  ./analyze.sh AAPL 03           # Single framework"
-    echo "  ./analyze.sh AAPL full         # All 8 frameworks"
-    exit 1
-}
-
-# Check budget before running
-check_budget() {
-    if [ ! -f "$COST_LOG" ]; then
-        return 0
-    fi
-    
-    local today=$(date -u +%Y-%m-%d)
-    local spent=$(grep "^$today" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
-    
-    if [ -z "$spent" ]; then
-        spent="0"
-    fi
-    
-    if (( $(echo "$spent >= $DAILY_BUDGET" | bc -l) )); then
-        echo "⚠️  DAILY BUDGET EXCEEDED!"
-        echo "Spent: \$$spent / \$$DAILY_BUDGET"
-        echo ""
-        echo "Options:"
-        echo "  1. Increase budget in script (DAILY_BUDGET variable)"
-        echo "  2. Reset log: rm $COST_LOG"
-        echo "  3. Review: ./cost_tracker.sh"
-        exit 1
-    fi
-    
-    local remaining=$(echo "$DAILY_BUDGET - $spent" | bc -l)
-    echo "[Budget] Spent: \$$spent / \$$DAILY_BUDGET | Remaining: \$$remaining"
-}
-
-# Log cost after each framework
 log_cost() {
     local ticker="$1"
     local framework="$2"
     local input_tokens="$3"
     local output_tokens="$4"
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    
-    # Calculate cost (Kimi rates)
     local input_cost=$(echo "scale=6; $input_tokens * 0.60 / 1000000" | bc)
     local output_cost=$(echo "scale=6; $output_tokens * 3.00 / 1000000" | bc)
     local total_cost=$(echo "scale=6; $input_cost + $output_cost" | bc)
-    
-    echo "$timestamp | $ticker | $framework | $MODEL_PRIMARY | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
-    echo "  [Cost] $framework: ${input_tokens}i/${output_tokens}o = \$$total_cost"
+    echo "$timestamp | $ticker | $framework | moonshot/kimi-k2.5 | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
+    echo "  💰 $framework: \$$total_cost"
 }
 
-# Run a single framework
-run_framework() {
-    local ticker="$1"
-    local name="$2"
-    local id="$3"
-    local prompt_file="$PROMPTS_DIR/${id}.txt"
-    local output_file="$OUTPUTS_DIR/${ticker}_${id}.md"
-    
-    mkdir -p "$OUTPUTS_DIR"
-    
-    echo "[$id] $name"
-    
-    # Create output with metadata
-    cat > "$output_file" <<EOF
-# $name: $ticker
+check_budget() {
+    if [ ! -f "$COST_LOG" ]; then
+        return 0
+    fi
+    local today=$(date -u +%Y-%m-%d)
+    local spent=$(grep "^$today" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
+    [ -z "$spent" ] && spent="0"
+    if (( $(echo "$spent >= 0.10" | bc -l) )); then
+        echo "❌ Daily budget exceeded: \$$spent / \$0.10"
+        exit 1
+    fi
+    echo "💳 Budget: \$$spent / \$0.10"
+}
 
-**Status:** Analysis ready for API call
-**Model:** $MODEL_PRIMARY
-**Framework:** $id
-**Token Budget:** $MAX_TOKENS_PER_FRAMEWORK max
-
-## Data Source
-/tmp/company-analyzer-cache/${ticker}_data.json
-
-## Prompt File
-$prompt_file
-
-## Next Step
-To run analysis, execute prompt with OpenClaw API:
-\`\`\`
-model: $MODEL_PRIMARY
-prompt: [See $prompt_file]
-context: /tmp/company-analyzer-cache/${ticker}_data.json
-max_tokens: $MAX_TOKENS_PER_FRAMEWORK
-\`\`\`
-
----
-*Generated: $(date)*
-*Analyzer: Company Analyzer v6.4 (Protected)*
-*Protection: $MAX_TOKENS_PER_FRAMEWORK token limit enforced*
-EOF
+# ============================================
+# ARCHITECTURE UPDATE 3: Telegram Delivery Loop
+# ============================================
+send_telegram_chunked() {
+    local message="$1"
+    local chat_id="$2"
+    local max_length=4000
+    local total_length=${#message}
+    local offset=0
+    local chunk_num=1
     
-    echo "  -> Output: $output_file"
+    if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+        echo "  ⚠️  TELEGRAM_BOT_TOKEN not set, skipping delivery"
+        return 1
+    fi
     
-    # Log estimated cost (3000 input tokens, 500 output max)
-    log_cost "$ticker" "$name" "3000" "500"
+    echo "  📤 Delivering to Telegram (message length: $total_length)..."
     
+    while [ $offset -lt $total_length ]; do
+        # Extract chunk of max_length characters
+        local chunk="${message:$offset:$max_length}"
+        
+        # Escape special characters for JSON
+        local escaped_chunk=$(echo "$chunk" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g')
+        
+        # Send chunk
+        local response=$(curl -s -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "{\"chat_id\":\"$chat_id\",\"text\":\"$escaped_chunk\",\"parse_mode\":\"Markdown\"}")
+        
+        if echo "$response" | grep -q '"ok":true'; then
+            echo "    ✅ Chunk $chunk_num sent"
+        else
+            echo "    ❌ Chunk $chunk_num failed: $response"
+            return 1
+        fi
+        
+        offset=$((offset + max_length))
+        chunk_num=$((chunk_num + 1))
+        
+        # Small delay to avoid rate limits
+        sleep 0.5
+    done
+    
+    echo "  ✅ Telegram delivery complete ($((chunk_num - 1)) chunks)"
+}
+
+# ============================================
+# ARCHITECTURE UPDATE 1: Create Shared Cache
+# ============================================
+create_shared_cache() {
+    local ticker_data="$1"
+    
+    echo "📦 Creating shared context cache..."
+    
+    # Create cache object with 10-minute TTL
+    local cache_res=$(curl -s -X POST "https://api.moonshot.ai/v1/caching" \
+        -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"model\": \"kimi-k2.5\",
+            \"messages\": [
+                {
+                    \"role\": \"system\",
+                    \"content\": \"You are a financial analyst. Company data: $ticker_data\"
+                }
+            ],
+            \"ttl\": 600
+        }")
+    
+    CACHE_ID=$(echo "$cache_res" | jq -r '.id // empty')
+    
+    if [ -z "$CACHE_ID" ] || [ "$CACHE_ID" == "null" ]; then
+        echo "  ⚠️  Cache creation failed, falling back to direct calls"
+        CACHE_ID=""
+        return 1
+    fi
+    
+    echo "  ✅ Cache established: ${CACHE_ID:0:20}..."
     return 0
 }
 
-# Main execution
-[ -z "$TICKER" ] && show_usage
+# Run framework analysis with shared cache
+run_framework() {
+    local fw_id="$1"
+    local ticker="$2"
+    local framework_prompt=$(cat "$PROMPTS_DIR/$fw_id.txt" 2>/dev/null || echo "Analyze $fw_id")
+    
+    local response
+    if [ -n "$CACHE_ID" ]; then
+        # Use cached context
+        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
+            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"kimi-k2.5\",
+                \"cache_id\": \"$CACHE_ID\",
+                \"messages\": [
+                    {\"role\": \"user\", \"content\": \"$framework_prompt\"}
+                ]
+            }")
+    else
+        # Fallback: include full context
+        local full_prompt="Company: $ticker
 
-TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
+$framework_prompt"
+        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
+            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"kimi-k2.5\",
+                \"messages\": [
+                    {\"role\": \"user\", \"content\": \"$full_prompt\"}
+                ]
+            }")
+    fi
+    
+    # Extract content and usage
+    local content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+    local input_tokens=$(echo "$response" | jq -r '.usage.prompt_tokens // 0')
+    local output_tokens=$(echo "$response" | jq -r '.usage.completion_tokens // 0')
+    
+    # Save output
+    echo "$content" > "$OUTPUTS_DIR/${ticker}_${fw_id}.md"
+    
+    # Log cost
+    log_cost "$ticker" "$fw_id" "$input_tokens" "$output_tokens"
+    
+    echo "$content"
+}
 
-# Check budget
-check_budget
+# ============================================
+# ARCHITECTURE UPDATE 1 & 2: Synthesis with Cache and Screener Logic
+# ============================================
+run_synthesis() {
+    local ticker="$1"
+    
+    echo ""
+    echo "🧠 Phase 2: Strategic Synthesis (Binary Narrative Flip Detection)..."
+    echo ""
+    
+    # Collect all 8 framework outputs
+    local all_outputs=""
+    for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
+        local fw_file="$OUTPUTS_DIR/${ticker}_${fw_id}.md"
+        if [ -f "$fw_file" ]; then
+            all_outputs="${all_outputs}### ${FRAMEWORKS[$fw_id]} ###\n$(cat "$fw_file")\n\n"
+        fi
+    done
+    
+    # Read synthesis prompt
+    local synthesis_prompt=$(cat "$PROMPTS_DIR/09-synthesis.txt" 2>/dev/null)
+    if [ -z "$synthesis_prompt" ]; then
+        # Fallback if file doesn't exist yet
+        synthesis_prompt="You are a strategic investment screener. Analyze the following 8 framework outputs and provide:
+1. BINARY NARRATIVE FLIP DETECTION: Identify if there's a potential 180-degree shift in the investment thesis (e.g., growth story turning to value trap, or vice versa)
+2. SEAT-BASED SaaS PENALTY: Flag any heavy reliance on seat-based SaaS revenue models - these are structurally disadvantaged in AI era
+3. FINAL VERDICT: BUY / HOLD / SELL with conviction level (High/Medium/Low)"
+    fi
+    
+    local synthesis_message="$synthesis_prompt\n\n=== 8 FRAMEWORK ANALYSES ===\n\n$all_outputs"
+    
+    local response
+    if [ -n "$CACHE_ID" ]; then
+        # Use SAME cache_id as frameworks - no data resend
+        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
+            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"kimi-k2.5\",
+                \"cache_id\": \"$CACHE_ID\",
+                \"messages\": [
+                    {\"role\": \"user\", \"content\": \"$synthesis_message\"}
+                ]
+            }")
+    else
+        # Fallback
+        response=$(curl -s -X POST "https://api.moonshot.ai/v1/chat/completions" \
+            -H "Authorization: Bearer $MOONSHOT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"model\": \"kimi-k2.5\",
+                \"messages\": [
+                    {\"role\": \"user\", \"content\": \"$synthesis_message\"}
+                ]
+            }")
+    fi
+    
+    local content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+    local input_tokens=$(echo "$response" | jq -r '.usage.prompt_tokens // 0')
+    local output_tokens=$(echo "$response" | jq -r '.usage.completion_tokens // 0')
+    
+    # Save synthesis
+    echo "$content" > "$OUTPUTS_DIR/${ticker}_synthesis.md"
+    log_cost "$ticker" "09-synthesis" "$input_tokens" "$output_tokens"
+    
+    echo "$content"
+}
 
-# Resolve framework
-if [ -n "${ALIASES[$ANALYSIS_TYPE]:-}" ]; then
-    SELECTED=("${ALIASES[$ANALYSIS_TYPE]}")
-elif [ "$ANALYSIS_TYPE" = "full" ]; then
-    SELECTED=("01-phase" "02-metrics" "03-ai-moat" "04-strategic-moat" "05-sentiment" "06-growth" "07-business" "08-risk")
-elif [ "$ANALYSIS_TYPE" = "moat" ]; then
-    SELECTED=("03-ai-moat" "04-strategic-moat")
-elif [ "$ANALYSIS_TYPE" = "quick" ]; then
-    SELECTED=("01-phase" "02-metrics")
-else
-    echo "Error: Unknown framework '$ANALYSIS_TYPE'"
-    show_usage
+# ============================================
+# MAIN EXECUTION
+# ============================================
+
+if [ "$LIVE" != "--live" ]; then
+    echo "DRY RUN MODE"
+    echo ""
+    echo "To run LIVE: ./analyze.sh $TICKER_UPPER --live"
+    echo "With Telegram: ./analyze.sh $TICKER_UPPER --live --telegram <CHAT_ID>"
+    exit 0
 fi
 
 echo "======================================"
-echo "  Company Analyzer v6.4 - PROTECTED"
+echo "  LIVE ANALYSIS: $TICKER_UPPER"
 echo "======================================"
 echo ""
-echo "Ticker: $TICKER_UPPER"
-echo "Budget: \$$DAILY_BUDGET daily limit"
-echo "Frameworks: ${#SELECTED[@]}"
-echo "Token limit: $MAX_TOKENS_PER_FRAMEWORK per analysis"
+
+check_budget
 echo ""
 
-# Check data
-DATA_DIR="/tmp/company-analyzer-cache"
-DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
-if [ ! -f "$DATA_FILE" ]; then
-    echo "Error: No data found. Run: ./fetch_data.sh $TICKER_UPPER"
+# Check dependencies
+if ! command -v jq &> /dev/null; then
+    echo "❌ Error: 'jq' is required"
     exit 1
 fi
 
-echo "[✓] Data loaded"
+if [ -z "${MOONSHOT_API_KEY:-}" ]; then
+    echo "❌ Error: MOONSHOT_API_KEY not set"
+    exit 1
+fi
+
+# Prepare data
+DATA_FILE="/tmp/company-analyzer-cache/${TICKER_UPPER}_data.json"
+if [ ! -f "$DATA_FILE" ]; then
+    echo "📊 Fetching data..."
+    "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" 2>&1 | tail -3
+fi
+
+TICKER_DATA=$(cat "$DATA_FILE" 2>/dev/null | jq -c . 2>/dev/null || echo "{\"ticker\":\"$TICKER_UPPER\"}")
+
+mkdir -p "$OUTPUTS_DIR"
+
+# Create shared cache for all frameworks + synthesis
+create_shared_cache "$TICKER_DATA"
+
+echo ""
+echo "📋 Phase 1: Analyzing 8 Frameworks (Parallel)..."
 echo ""
 
-# Run frameworks
-FAIL_COUNT=0
-for fw in "${SELECTED[@]}"; do
-    if ! run_framework "$TICKER_UPPER" "${FRAMEWORKS[$fw]}" "$fw"; then
-        FAIL_COUNT=$((FAIL_COUNT + 1))
-        echo "  ⚠️  Framework failed ($FAIL_COUNT/$CIRCUIT_BREAKER)"
-        
-        if [ $FAIL_COUNT -ge $CIRCUIT_BREAKER ]; then
-            echo ""
-            echo "CIRCUIT BREAKER TRIPPED! Too many failures."
-            echo "Stopping to prevent runaway costs."
-            exit 1
-        fi
-    fi
+# Run 8 frameworks in parallel
+for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
+    (
+        run_framework "$fw_id" "$TICKER_UPPER" > /dev/null 2>&1
+    ) &
 done
 
+# Wait for all frameworks
+wait
+echo "  ✅ All 8 frameworks complete"
+
+# Run synthesis using same cache
+SYNTHESIS_OUTPUT=$(run_synthesis "$TICKER_UPPER")
+
+# Display synthesis
 echo ""
 echo "======================================"
-echo "Analysis complete"
+echo "  SYNTHESIS & VERDICT"
 echo "======================================"
 echo ""
-echo "Output files:"
-ls -1 "$OUTPUTS_DIR"/${TICKER_UPPER}_*.md 2>/dev/null || echo "  (none)"
+echo "$SYNTHESIS_OUTPUT"
 echo ""
-echo "Cost summary:"
-if [ -f "$COST_LOG" ]; then
-    "$SCRIPT_DIR/cost_tracker.sh" 2>/dev/null || echo "  Run: ./cost_tracker.sh"
-else
-    echo "  No costs logged (dry run mode)"
+
+# ============================================
+# ARCHITECTURE UPDATE 3: Safe Telegram Delivery
+# ============================================
+if [ "$TELEGRAM_FLAG" == "--telegram" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+    echo "======================================"
+    echo "  DELIVERING TO TELEGRAM"
+    echo "======================================"
+    echo ""
+    
+    # Build full message
+    FULL_MESSAGE="📊 *${TICKER_UPPER} Analysis*
+
+${SYNTHESIS_OUTPUT}
+
+*8 Frameworks Analyzed* ✅"
+    
+    send_telegram_chunked "$FULL_MESSAGE" "$TELEGRAM_CHAT_ID"
 fi
+
+echo "======================================"
+echo "✅ ANALYSIS COMPLETE"
+echo "======================================"
+echo ""
+echo "Outputs saved: $OUTPUTS_DIR/${TICKER_UPPER}_*.md"

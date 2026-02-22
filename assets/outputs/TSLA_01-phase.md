@@ -1,0 +1,3 @@
+**Phase Classification: Late Growth (Transitioning toward Maturity)**
+
+With $97.7B in revenue and 19% annual growth, Tesla exhibits late-stage growth characteristics—maintaining double-digit expansion at massive scale while diversifying into AI and robotics. However, operating margin compression from strategic price cuts and declining regulatory credits indicate transitioning market dynamics typical of industries approaching maturity. The company's shift from pure premium positioning to volume-driven mass market penetration—evidenced by 1.8M deliveries and margin pressure—confirms its evolution beyond early growth phases toward market saturation dynamics.
