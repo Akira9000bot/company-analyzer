@@ -35,7 +35,7 @@ cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER>
 |---------|---------|
 | **Parallel Execution** | 8 frameworks run simultaneously (~4-6s vs ~20s sequential) |
 | **Response Caching** | Re-analyzing same ticker uses cache = ~50-80% cost savings |
-| **Per-Framework Budget** | Early exit if daily budget exceeded mid-analysis |
+| **Cost Tracking** | Logs spending for visibility (no enforced limits) |
 | **Alpha Vantage** | Price data (P/E, market cap) when API key configured |
 | **Retry Logic** | 3 retries with exponential backoff on API failures |
 
@@ -92,10 +92,10 @@ cd skills/company-analyzer && ./scripts/run-framework.sh AAPL 03-ai-moat --live
 - Key: `TICKER_FWID_PROMPT_HASH`
 - Cached responses show: `💰 framework: $0.0000 (cached)`
 
-### Cost Protection
-- Daily budget: $0.10 (hard stop)
-- Checked before each framework
-- Budget exhausted mid-run = graceful exit with partial results
+### Cost Tracking (No enforced limits)
+- Costs are logged for visibility
+- No spending limit enforced
+- Run as many analyses as needed
 
 ## Configuration
 
@@ -132,11 +132,7 @@ All analyses saved to `assets/outputs/`:
 
 ## Troubleshooting
 
-**"Budget exceeded" error:**
-- Check daily spend: `cat /tmp/company-analyzer-costs.log`
-- Wait until tomorrow, or clear log to reset (not recommended)
-
-**"Alpha Vantage rate limit":**
+**"Alpha Vantage rate limit":
 - Free tier = 25 calls/day
 - Price data falls back to N/A, analysis continues with SEC data only
 

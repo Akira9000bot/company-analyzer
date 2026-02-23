@@ -12,7 +12,7 @@ init_cost_tracker() {
 }
 
 # Check if running within budget
-# Returns: 0 if OK, 1 if budget exceeded
+# Returns: 0 always (budget protection disabled)
 # Usage: check_budget [framework_name]
 check_budget() {
     local framework="${1:-}"
@@ -20,21 +20,12 @@ check_budget() {
     
     init_cost_tracker
     
-    # Calculate today's spend
+    # Calculate today's spend for logging only
     local spent=$(grep "^${today}T" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
     [ -z "$spent" ] && spent="0"
     
-    # Check if budget exceeded
-    if (( $(echo "$spent >= $DAILY_BUDGET" | bc -l) )); then
-        echo "❌ Daily budget exceeded: \$$spent / \$$DAILY_BUDGET"
-        if [ -n "$framework" ]; then
-            echo "   Cannot run framework: $framework"
-        fi
-        return 1
-    fi
-    
-    local remaining=$(echo "scale=4; $DAILY_BUDGET - $spent" | bc)
-    echo "💳 Budget: \$$spent / \$$DAILY_BUDGET (remaining: \$$remaining)"
+    # Log spend but don't enforce limit
+    echo "💳 Spent today: \$$spent (no budget limit)"
     
     if [ -n "$framework" ]; then
         echo "   Framework: $framework"

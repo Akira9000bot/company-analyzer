@@ -1,0 +1,9 @@
+{
+  "model": "kimi-k2.5",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Company: PSTG\n\nROLE: Market Sentiment Analyst\nTASK: Assess valuation and market sentiment\nDATA: Use provided data only — no additional research\nOUTPUT: Valuation (Cheap/Fair/Expensive) + Sentiment (Bearish/Neutral/Bullish)\n\nConsider:\n- Revenue multiples vs peers\n- Growth rate vs valuation\n- Analyst consensus\n- Recent price performance\n- Narrative drivers\n\nProvide valuation and sentiment assessment with brief rationale."
+    }
+  ]
+}
