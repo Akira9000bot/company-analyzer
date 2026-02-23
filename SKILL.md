@@ -131,14 +131,14 @@ All analyses saved to `assets/outputs/`:
 |------|------|------|
 | Sequential (old) | ~20s | $0.04 |
 | Parallel (8 frameworks, unlimited) | ~4s | ~$0.045 |
-| **Parallel (token-limited)** | ~4s | **~$0.018** |
+| **Parallel (with reasoning buffer)** | ~4s | **~$0.035** |
 | Cached | ~1s | $0.00 |
 
 **Token Limits Applied:**
-- API-level `max_tokens` enforced per framework
-- Prompt-level strict output constraints
-- Average output reduced from ~1,600 to ~700 tokens
-- **60% cost reduction** vs unlimited output
+- API-level `max_tokens` accounts for Kimi reasoning (~600 tokens) + content (~800 tokens)
+- Total per framework: 1200-1500 tokens
+- Prompt-level strict output constraints guide model
+- **~25% cost reduction** vs unlimited output while ensuring content delivery
 
 ## Troubleshooting
 
