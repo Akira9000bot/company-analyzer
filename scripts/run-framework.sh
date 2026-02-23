@@ -21,16 +21,18 @@ FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$(dirname "$SCRIPT_DIR")/assets/outputs}"
 
-# Framework-specific max_tokens limits (aggressive output constraints)
+# Framework-specific max_tokens limits (accounting for Kimi reasoning overhead)
+# Reasoning typically consumes 400-600 tokens, so we add buffer
+# Target: ~600-900 tokens of actual content after reasoning
 declare -A MAX_TOKENS=(
-    ["01-phase"]=600
-    ["02-metrics"]=800
-    ["03-ai-moat"]=800
-    ["04-strategic-moat"]=900
-    ["05-sentiment"]=700
-    ["06-growth"]=800
-    ["07-business"]=800
-    ["08-risk"]=700
+    ["01-phase"]=1200      # 600 reasoning + 600 content
+    ["02-metrics"]=1400    # 600 reasoning + 800 content
+    ["03-ai-moat"]=1400    # 600 reasoning + 800 content
+    ["04-strategic-moat"]=1500  # 600 reasoning + 900 content
+    ["05-sentiment"]=1300  # 600 reasoning + 700 content
+    ["06-growth"]=1400     # 600 reasoning + 800 content
+    ["07-business"]=1400   # 600 reasoning + 800 content
+    ["08-risk"]=1300       # 600 reasoning + 700 content
 )
 
 # Initialize trace after parsing args
