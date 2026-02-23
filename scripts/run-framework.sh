@@ -15,15 +15,15 @@ source "$SCRIPT_DIR/lib/cost-tracker.sh"
 source "$SCRIPT_DIR/lib/api-client.sh"
 source "$SCRIPT_DIR/lib/trace.sh"
 
-# Initialize trace
-init_trace
-log_trace "INFO" "$FW_ID" "Framework execution starting"
-
 # Parse arguments
 TICKER="${1:-}"
 FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$(dirname "$SCRIPT_DIR")/assets/outputs}"
+
+# Initialize trace after parsing args
+init_trace
+log_trace "INFO" "$FW_ID" "Framework execution starting"
 
 if [ -z "$TICKER" ] || [ -z "$FW_ID" ] || [ -z "$PROMPT_FILE" ]; then
     echo "Usage: $0 <ticker> <fw_id> <prompt_file> [output_dir]"
@@ -32,10 +32,6 @@ if [ -z "$TICKER" ] || [ -z "$FW_ID" ] || [ -z "$PROMPT_FILE" ]; then
 fi
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
-
-# Initialize trace
-init_trace
-log_trace "INFO" "$FW_ID" "Framework execution starting for $TICKER_UPPER"
 
 # Validate inputs
 if [ ! -f "$PROMPT_FILE" ]; then
@@ -59,7 +55,7 @@ CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 # Check cache first
 echo "🔍 Checking cache for $FW_ID..."
 log_trace "INFO" "$FW_ID" "Checking cache"
-CACHED_RESPONSE=$(cache_get "$CACHE_KEY")
+CACHED_RESPONSE=$(cache_get "$CACHE_KEY" 2>/dev/null) || true
 
 if [ -n "$CACHED_RESPONSE" ]; then
     AGE_DAYS=$(cache_age "$CACHE_KEY")
@@ -99,8 +95,11 @@ echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
 log_trace "INFO" "$FW_ID" "Complete | Tokens: ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
-# Cache the response
-cache_set "$CACHE_KEY" "$CONTENT" "{\"ticker\": \"$TICKER_UPPER\", \"framework\": \"$FW_ID\", \"tokens\": {\"input\": $INPUT_TOKENS, \"output\": $OUTPUT_TOKENS}}"
+# Cache the response (best effort - don't fail if caching breaks)
+if [ -n "$INPUT_TOKENS" ] && [ -n "$OUTPUT_TOKENS" ]; then
+    METADATA=$(jq -n --arg ticker "$TICKER_UPPER" --arg fw "$FW_ID" --argjson input "$INPUT_TOKENS" --argjson output "$OUTPUT_TOKENS" '{ticker: $ticker, framework: $fw, tokens: {input: $input, output: $output}}' 2>/dev/null) || METADATA="{}"
+    cache_set "$CACHE_KEY" "$(cat "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md")" "$METADATA" 2>/dev/null || log_trace "WARN" "$FW_ID" "Cache write failed"
+fi
 
 echo "✅ $FW_ID complete"
 exit 0

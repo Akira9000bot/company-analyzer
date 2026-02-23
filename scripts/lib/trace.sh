@@ -3,7 +3,9 @@
 # lib/trace.sh - Deep Trace Logging for company-analyzer
 #
 
-TRACE_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")/assets/traces"
+# Get the directory where this script is located
+TRACE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRACE_DIR="$(dirname "$TRACE_LIB_DIR")/../assets/traces"
 RAW_DIR="$TRACE_DIR/raw"
 
 # Initialize trace directories
@@ -35,5 +37,3 @@ dump_raw() {
     
     echo "$content" > "$raw_file"
 }
-
-init_trace

@@ -59,14 +59,14 @@ cache_set() {
     
     init_cache
     
-    jq -n \
+    # Use printf to properly handle the response and pipe to jq
+    printf '%s' "$response" | jq -Rs \
         --arg key "$key" \
-        --arg response "$response" \
         --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --argjson metadata "$metadata" \
         '{
             cache_key: $key,
-            response: $response,
+            response: .,
             cached_at: $timestamp,
             metadata: $metadata
         }' > "$cache_file"

@@ -25,6 +25,11 @@ check_api_key() {
     return 0
 }
 
+# Alias for backward compatibility
+validate_api_key() {
+    check_api_key
+}
+
 call_moonshot_api() {
     local prompt="$1"
     local attempt=1
@@ -78,8 +83,18 @@ extract_content() {
     echo "$1" | jq -r '.choices[0].message.content // empty'
 }
 
-extract_tokens() {
+extract_usage() {
     local input=$(echo "$1" | jq -r '.usage.prompt_tokens // 0')
     local output=$(echo "$1" | jq -r '.usage.completion_tokens // 0')
     echo "$input $output"
 }
+
+# Alias for backward compatibility
+extract_tokens() {
+    extract_usage "$@"
+}
+
+# Export functions if sourced
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+    export -f check_api_key validate_api_key call_moonshot_api extract_content extract_usage extract_tokens
+fi
