@@ -50,11 +50,12 @@ log_cost() {
     init_cost_tracker
     
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    local input_cost=$(echo "scale=6; $input_tokens * 0.60 / 1000000" | bc)
-    local output_cost=$(echo "scale=6; $output_tokens * 3.00 / 1000000" | bc)
+    # Gemini 2.0 Flash pricing: $0.075/M input, $0.30/M output
+    local input_cost=$(echo "scale=6; $input_tokens * 0.075 / 1000000" | bc)
+    local output_cost=$(echo "scale=6; $output_tokens * 0.30 / 1000000" | bc)
     local total_cost=$(echo "scale=6; $input_cost + $output_cost" | bc)
     
-    echo "$timestamp | $ticker | $framework | moonshot/kimi-k2.5 | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
+    echo "$timestamp | $ticker | $framework | gemini-2.0-flash | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
     echo "  💰 $framework: \$$total_cost (${input_tokens}i/${output_tokens}o tokens)"
 }
 

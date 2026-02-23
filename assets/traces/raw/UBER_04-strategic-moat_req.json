@@ -1,0 +1,10 @@
+{
+  "model": "kimi-k2.5",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Company: UBER\n\nROLE: Competitive Analyst\nTASK: Assess strategic moat durability\nDATA: Use provided data only — no additional research\nOUTPUT: None/Narrow/Wide rating with key advantages and threats\n\nEvaluate:\n- Network effects\n- Switching costs\n- Scale advantages\n- Brand/pricing power\n- Barriers to entry\n\nProvide moat rating and primary competitive threats.\n\n⚠️ STRICT OUTPUT CONSTRAINT: Moat rating + 3 bullet points max. Max 550 tokens. Be direct."
+    }
+  ],
+  "max_tokens": 1500
+}

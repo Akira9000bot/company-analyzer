@@ -131,14 +131,14 @@ All analyses saved to `assets/outputs/`:
 |------|------|------|
 | Sequential (old) | ~20s | $0.04 |
 | Parallel (8 frameworks, unlimited) | ~4s | ~$0.045 |
-| **Parallel (with reasoning buffer)** | ~4s | **~$0.035** |
+| **Parallel (Gemini 2.0 Flash)** | ~5s | **~$0.003** |
 | Cached | ~1s | $0.00 |
 
-**Token Limits Applied:**
-- API-level `max_tokens` accounts for Kimi reasoning (~600 tokens) + content (~800 tokens)
-- Total per framework: 1200-1500 tokens
-- Prompt-level strict output constraints guide model
-- **~25% cost reduction** vs unlimited output while ensuring content delivery
+**Gemini 2.0 Flash Benefits:**
+- No reasoning overhead - all tokens go to content
+- 10x cheaper than Kimi: $0.075/M input, $0.30/M output
+- Built-in rate limiting (15 RPM free tier)
+- Estimated cost per analysis: ~$0.003 (vs ~$0.035 with Kimi)
 
 ## Troubleshooting
 
