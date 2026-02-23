@@ -18,7 +18,11 @@ TICKER="${1:-}"
 [ -z "$TICKER" ] && { echo "Usage: ./fetch_data.sh <TICKER>"; exit 1; }
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
-DATA_DIR="/tmp/company-analyzer-cache"
+
+# Get skill root directory for cache location
+FETCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FETCH_SKILL_DIR="$(cd "$FETCH_SCRIPT_DIR/.." && pwd)"
+DATA_DIR="$FETCH_SKILL_DIR/.cache/data"
 DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
 SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
 AV_FILE="$DATA_DIR/${TICKER_UPPER}_av_raw.json"

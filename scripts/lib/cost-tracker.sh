@@ -3,11 +3,16 @@
 # lib/cost-tracker.sh - Cost tracking and budget management
 #
 
-COST_LOG="/tmp/company-analyzer-costs.log"
+# Get skill root directory (2 levels up from lib/)
+COST_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COST_SKILL_DIR="$(cd "$COST_LIB_DIR/../.." && pwd)"
+COST_CACHE_DIR="$COST_SKILL_DIR/.cache"
+COST_LOG="$COST_CACHE_DIR/costs.log"
 DAILY_BUDGET=0.10
 
 # Initialize cost log
 init_cost_tracker() {
+    mkdir -p "$COST_CACHE_DIR"
     touch "$COST_LOG"
 }
 
@@ -85,7 +90,7 @@ cost_summary() {
     echo "Cost Summary:"
     echo "  Today: \$$today_spent / \$$DAILY_BUDGET"
     echo "  Total (all time): \$$total_spent"
-    echo "  Log file: $COST_LOG"
+    echo "  Log: $COST_LOG"
 }
 
 # Show detailed cost history

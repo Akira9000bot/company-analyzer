@@ -100,7 +100,7 @@ fi
 echo ""
 
 # Fetch data if not cached
-DATA_FILE="/tmp/company-analyzer-cache/${TICKER_UPPER}_data.json"
+DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
 if [ ! -f "$DATA_FILE" ]; then
     echo "📊 Fetching company data..."
     "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" 2>&1 | tail -5

@@ -51,3 +51,14 @@
 [01:41:09] INFO   | 06-growth    | Framework execution starting
 [01:41:09] INFO   | 07-business  | Framework execution starting
 [01:41:09] INFO   | 08-risk      | Framework execution starting
+[03:59:44] INFO   | 01-phase     | Framework execution starting
+[03:59:44] INFO   | 02-metrics   | Framework execution starting
+[03:59:44] INFO   | 03-ai-moat   | Framework execution starting
+[03:59:44] INFO   | 04-strategic-moat | Framework execution starting
+[03:59:44] INFO   | 05-sentiment | Framework execution starting
+[03:59:44] INFO   | 08-risk      | Framework execution starting
+[03:59:44] INFO   | 07-business  | Framework execution starting
+[03:59:44] INFO   | 06-growth    | Framework execution starting
+[04:02:28] INFO   | 01-phase     | Framework execution starting
+[04:03:25] INFO   | 01-phase     | Framework execution starting
+[04:03:49] INFO   | 01-phase     | Framework execution starting

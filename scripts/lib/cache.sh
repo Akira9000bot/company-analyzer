@@ -1,10 +1,13 @@
 #!/bin/bash
 #
 # lib/cache.sh - Response caching utilities
-# Cache location: /tmp/company-analyzer-cache/responses/
+# Cache location: <skill_dir>/.cache/responses/
 #
 
-CACHE_DIR="/tmp/company-analyzer-cache/responses"
+# Get skill root directory (2 levels up from lib/)
+CACHE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_SKILL_DIR="$(cd "$CACHE_LIB_DIR/../.." && pwd)"
+CACHE_DIR="$CACHE_SKILL_DIR/.cache/responses"
 CACHE_TTL_DAYS=7
 
 # Initialize cache directory
@@ -59,17 +62,31 @@ cache_set() {
     
     init_cache
     
-    # Use printf to properly handle the response and pipe to jq
-    printf '%s' "$response" | jq -Rs \
+    # Validate metadata is valid JSON, fallback to empty object
+    if ! echo "$metadata" | jq -e '.' >/dev/null 2>&1; then
+        metadata="{}"
+    fi
+    
+    # Write response to temp file first (handles special chars safely)
+    local temp_response=$(mktemp)
+    printf '%s' "$response" > "$temp_response"
+    
+    # Build cache entry using jq --rawfile for the response content
+    jq -n \
         --arg key "$key" \
         --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         --argjson metadata "$metadata" \
+        --rawfile response "$temp_response" \
         '{
             cache_key: $key,
-            response: .,
+            response: $response,
             cached_at: $timestamp,
             metadata: $metadata
         }' > "$cache_file"
+    
+    local exit_code=$?
+    rm -f "$temp_response"
+    return $exit_code
 }
 
 # Get cache age in days

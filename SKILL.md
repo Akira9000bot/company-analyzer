@@ -87,7 +87,7 @@ cd skills/company-analyzer && ./scripts/run-framework.sh AAPL 03-ai-moat --live
 - **`lib/api-client.sh`** - Moonshot API with retry logic
 
 ### Caching
-- Location: `/tmp/company-analyzer-cache/responses/`
+- Location: `/.openclaw/cache/company-analyzer/responses/`
 - TTL: 7 days
 - Key: `TICKER_FWID_PROMPT_HASH`
 - Cached responses show: `💰 framework: $0.0000 (cached)`
