@@ -68,3 +68,63 @@
 [01:12:45] INFO   | MAIN         | Frameworks complete | Success: 8/8 | Time: 97s
 [01:12:45] INFO   | SYNTH        | Starting synthesis phase
 [01:12:45] API    | CMD          | Calling Moonshot (Attempt 1)...
+[01:41:09] INFO   | MAIN         | === Analysis Start: PSTG ===
+[01:41:09] INFO   | MAIN         | Mode: --live
+[01:41:09] INFO   | MAIN         | Starting parallel execution of 8 frameworks
+[01:41:09] INFO   | 01-phase     | Launched (PID: 615421)
+[01:41:09] INFO   | 02-metrics   | Launched (PID: 615426)
+[01:41:09] INFO   | 03-ai-moat   | Launched (PID: 615437)
+[01:41:09] INFO   | 04-strategic-moat | Launched (PID: 615446)
+[01:41:09] INFO   | 05-sentiment | Launched (PID: 615458)
+[01:41:09] INFO   | 06-growth    | Launched (PID: 615470)
+[01:41:09] INFO   | 07-business  | Launched (PID: 615492)
+[01:41:09] INFO   | 08-risk      | Launched (PID: 615511)
+[01:41:09] INFO   | 01-phase     | Checking cache
+[01:41:09] INFO   | 02-metrics   | Checking cache
+[01:41:09] INFO   | 03-ai-moat   | Checking cache
+[01:41:09] INFO   | 04-strategic-moat | Checking cache
+[01:41:09] INFO   | 01-phase     | Cache MISS - calling API
+[01:41:09] INFO   | 02-metrics   | Cache MISS - calling API
+[01:41:09] INFO   | 03-ai-moat   | Cache MISS - calling API
+[01:41:09] INFO   | 05-sentiment | Checking cache
+[01:41:09] INFO   | 06-growth    | Checking cache
+[01:41:09] INFO   | 04-strategic-moat | Cache MISS - calling API
+[01:41:10] INFO   | 07-business  | Checking cache
+[01:41:10] INFO   | 05-sentiment | Cache MISS - calling API
+[01:41:10] API    | 01-phase     | Calling Moonshot (Attempt 1)...
+[01:41:10] API    | 02-metrics   | Calling Moonshot (Attempt 1)...
+[01:41:10] API    | 03-ai-moat   | Calling Moonshot (Attempt 1)...
+[01:41:10] INFO   | 08-risk      | Checking cache
+[01:41:10] INFO   | 07-business  | Cache MISS - calling API
+[01:41:10] INFO   | 06-growth    | Cache MISS - calling API
+[01:41:10] API    | 04-strategic-moat | Calling Moonshot (Attempt 1)...
+[01:41:10] API    | 05-sentiment | Calling Moonshot (Attempt 1)...
+[01:41:10] INFO   | 08-risk      | Cache MISS - calling API
+[01:41:10] API    | 07-business  | Calling Moonshot (Attempt 1)...
+[01:41:10] API    | 06-growth    | Calling Moonshot (Attempt 1)...
+[01:41:10] API    | 08-risk      | Calling Moonshot (Attempt 1)...
+[01:41:32] API    | 02-metrics   | SUCCESS | Latency: 22.899013379s
+[01:41:32] INFO   | 02-metrics   | Complete | Tokens: 98i/1088o
+[01:41:33] WARN   | 02-metrics   | Cache write failed
+[01:41:37] API    | 04-strategic-moat | SUCCESS | Latency: 27.506279308s
+[01:41:37] INFO   | 04-strategic-moat | Complete | Tokens: 86i/1326o
+[01:41:37] WARN   | 04-strategic-moat | Cache write failed
+[01:41:38] API    | 05-sentiment | SUCCESS | Latency: 28.497254715s
+[01:41:38] INFO   | 05-sentiment | Complete | Tokens: 99i/1370o
+[01:41:38] WARN   | 05-sentiment | Cache write failed
+[01:41:40] API    | 01-phase     | SUCCESS | Latency: 30.902886397s
+[01:41:41] INFO   | 01-phase     | Complete | Tokens: 86i/1501o
+[01:41:41] WARN   | 01-phase     | Cache write failed
+[01:41:56] API    | 08-risk      | SUCCESS | Latency: 45.907010864s
+[01:41:56] INFO   | 08-risk      | Complete | Tokens: 90i/2288o
+[01:41:56] WARN   | 08-risk      | Cache write failed
+[01:41:57] API    | 06-growth    | SUCCESS | Latency: 47.018489958s
+[01:41:57] INFO   | 06-growth    | Complete | Tokens: 87i/2511o
+[01:41:57] WARN   | 06-growth    | Cache write failed
+[01:42:08] API    | 03-ai-moat   | SUCCESS | Latency: 58.174670397s
+[01:42:08] INFO   | 03-ai-moat   | Complete | Tokens: 123i/3200o
+[01:42:08] WARN   | 03-ai-moat   | Cache write failed
+[01:42:10] WARN   | 07-business  | API Failure (HTTP 000)
+[01:42:12] API    | 07-business  | Calling Moonshot (Attempt 2)...
+[01:43:12] WARN   | 07-business  | API Failure (HTTP 000)
+[01:43:16] API    | 07-business  | Calling Moonshot (Attempt 3)...
