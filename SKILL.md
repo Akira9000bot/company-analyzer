@@ -17,6 +17,8 @@ DO NOT spawn subagents. DO NOT use sessions_spawn. Direct script execution only.
 
 Perform comprehensive investment research on public companies using 8 specialized analysis frameworks with **parallel execution**, **response caching**, and **cost controls**.
 
+**Note:** Synthesis phase removed. Analysis returns 8 framework outputs without consolidated verdict.
+
 ## Quick Commands
 
 When user types `/analyze <TICKER>`, execute:
@@ -59,7 +61,7 @@ User types: `/analyze AAPL`
 
 You execute: `cd skills/company-analyzer && ./scripts/analyze-parallel.sh AAPL --live`
 
-Runs all 8 frameworks in parallel + synthesis. Cost: ~$0.04 (or $0 if cached).
+Runs all 8 frameworks in parallel. Cost: ~$0.03 (or $0 if cached).
 
 ### Data Fetching
 Before analysis, fetch company data:
@@ -120,14 +122,15 @@ Already configured via OpenClaw auth profiles.
 
 All analyses saved to `assets/outputs/`:
 - `TICKER_01-phase.md` through `TICKER_08-risk.md`
-- `TICKER_synthesis.md` - Investment thesis
+
+*(Synthesis phase removed for cost efficiency)*
 
 ## Performance
 
 | Mode | Time | Cost |
 |------|------|------|
 | Sequential (old) | ~20s | $0.04 |
-| Parallel (new) | ~5s | $0.04 |
+| Parallel (8 frameworks) | ~4s | **~$0.03** |
 | Cached | ~1s | $0.00 |
 
 ## Troubleshooting

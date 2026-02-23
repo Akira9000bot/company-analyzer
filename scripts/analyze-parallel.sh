@@ -185,79 +185,26 @@ fi
 
 echo ""
 
-# ============================================ 
-# Phase 2: Synthesis 
-# ============================================ 
-echo "🧠 Phase 2: Strategic Synthesis..."
-echo ""
-
-log_trace "INFO" "SYNTH" "Starting synthesis phase"
-
-# Check budget before synthesis 
-if ! check_budget "09-synthesis"; then 
-    echo "❌ Cannot run synthesis - budget exceeded" 
-    log_trace "ERROR" "SYNTH" "Budget exceeded, cannot synthesize"
-    exit 1 
-fi
-
-# Collect all framework outputs
-ALL_OUTPUTS=""
-for fw_id in "${FW_IDS[@]}"; do
-    FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
-    if [ -f "$FW_FILE" ]; then
-        ALL_OUTPUTS="${ALL_OUTPUTS}### ${FRAMEWORKS[$fw_id]} ###
-$(cat "$FW_FILE")
-
-"
-    fi
-done
-
-# Read synthesis prompt
-SYNTHESIS_PROMPT=$(cat "$PROMPTS_DIR/09-synthesis.txt" 2>/dev/null)
-if [ -z "$SYNTHESIS_PROMPT" ]; then
-    SYNTHESIS_PROMPT="You are a strategic investment screener. Analyze the following 8 framework outputs and provide a BUY/HOLD/SELL verdict."
-fi
-
-SYNTHESIS_MESSAGE="$SYNTHESIS_PROMPT
-
-=== 8 FRAMEWORK ANALYSES ===
-
-$ALL_OUTPUTS"
-
-# Call API for synthesis
-SYNTH_START=$(date +%s)
-SYNTHESIS_RESPONSE=$(call_moonshot_api "$SYNTHESIS_MESSAGE")
-
-if [ $? -ne 0 ]; then
-    echo "❌ Synthesis API call failed"
-    exit 1
-fi
-
-SYNTHESIS_CONTENT=$(extract_content "$SYNTHESIS_RESPONSE")
-read SYNTH_INPUT SYNTH_OUTPUT <<< $(extract_usage "$SYNTHESIS_RESPONSE")
-
-# Save synthesis
-echo "$SYNTHESIS_CONTENT" > "$OUTPUTS_DIR/${TICKER_UPPER}_synthesis.md"
-log_cost "$TICKER_UPPER" "09-synthesis" "$SYNTH_INPUT" "$SYNTH_OUTPUT"
-
-SYNTH_END=$(date +%s)
-SYNTH_TIME=$((SYNTH_END - SYNTH_START))
-
-echo "  ✅ Synthesis complete (${SYNTH_TIME}s)"
-echo ""
-
-# Calculate total time
-TOTAL_TIME=$((END_TIME - START_TIME + SYNTH_TIME))
+# Calculate total time (no synthesis phase)
+TOTAL_TIME=$((END_TIME - START_TIME))
 
 # ============================================
 # Display Results
 # ============================================
 echo "======================================"
-echo "  SYNTHESIS & VERDICT"
+echo "  ANALYSIS COMPLETE: $TICKER_UPPER"
 echo "======================================"
 echo ""
-echo "$SYNTHESIS_CONTENT"
-echo ""
+
+# Show all framework summaries
+for fw_id in "${FW_IDS[@]}"; do
+    FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+    if [ -f "$FW_FILE" ]; then
+        echo "### ${FRAMEWORKS[$fw_id]} ###"
+        head -20 "$FW_FILE"
+        echo ""
+    fi
+done
 
 # Show cost summary
 cost_summary
@@ -266,7 +213,6 @@ echo ""
 # Show timing
 echo "⏱️  Performance:"
 echo "  Frameworks (parallel): ${FRAMEWORK_TIME}s"
-echo "  Synthesis: ${SYNTH_TIME}s"
 echo "  Total: ${TOTAL_TIME}s"
 echo ""
 
@@ -323,13 +269,31 @@ if [ "$TELEGRAM_FLAG" == "--telegram" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
         echo "  ✅ Telegram delivery complete ($((chunk_num - 1)) chunks)"
     }
 
-    # Build full message
+    # Build summary message from all frameworks
     FULL_MESSAGE="📊 *${TICKER_UPPER} Analysis (Parallel)*
 
-${SYNTHESIS_CONTENT}
-
 *8 Frameworks Analyzed* ✅
-⏱️ Time: ${TOTAL_TIME}s | Parallel execution"
+⏱️ Time: ${TOTAL_TIME}s | No synthesis phase
+
+---
+
+"
+    
+    for fw_id in "${FW_IDS[@]}"; do
+        FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+        if [ -f "$FW_FILE" ]; then
+            # Extract first 300 chars of each framework
+            local fw_content=$(head -c 300 "$FW_FILE" | sed 's/\*/\\*/g; s/_/\\_/g')
+            FULL_MESSAGE="${FULL_MESSAGE}*${FRAMEWORKS[$fw_id]}:*
+${fw_content}...
+
+"
+        fi
+    done
+    
+    FULL_MESSAGE="${FULL_MESSAGE}
+---
+💰 Cost: ~\$0.03 (synthesis removed)"
 
     send_telegram_chunked "$FULL_MESSAGE" "$TELEGRAM_CHAT_ID"
 fi
