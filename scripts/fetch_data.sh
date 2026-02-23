@@ -10,6 +10,10 @@
 
 set -euo pipefail
 
+# Source tracing library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/trace.sh"
+
 TICKER="${1:-}"
 [ -z "$TICKER" ] && { echo "Usage: ./fetch_data.sh <TICKER>"; exit 1; }
 
@@ -38,7 +42,15 @@ if [ -f "$DATA_FILE" ]; then
     fi
 fi
 
+# Source tracing library
+source "$(dirname "${BASH_SOURCE[0]}")/lib/trace.sh"
+
 echo "📊 Fetching data for $TICKER_UPPER..."
+log_trace "INFO" "FETCH" "Starting data fetch for $TICKER_UPPER"
+
+# Initialize trace
+init_trace
+log_trace "INFO" "FETCH" "Starting data fetch for $TICKER_UPPER"
 
 # Set a user agent as required by SEC
 USER_AGENT="akira9000bot@gmail.com"
@@ -47,7 +59,9 @@ USER_AGENT="akira9000bot@gmail.com"
 # Alpha Vantage - Price and Valuation Data
 # ============================================
 fetch_alpha_vantage() {
+    log_trace "INFO" "FETCH" "Attempting Alpha Vantage fetch"
     if [ -z "$ALPHA_VANTAGE_KEY" ]; then
+        log_trace "WARN" "FETCH" "Alpha Vantage key not found"
         echo "  ⚠️  Alpha Vantage API key not found, skipping"
         return 1
     fi
@@ -55,11 +69,17 @@ fetch_alpha_vantage() {
     echo "  🔍 Fetching Alpha Vantage data..."
     
     # 1. Get quote data
+    local start_time=$(date +%s.%N)
     local quote_response=$(curl -s --max-time 15 \
         "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${TICKER_UPPER}&apikey=${ALPHA_VANTAGE_KEY}" 2>/dev/null)
+    local end_time=$(date +%s.%N)
+    local latency=$(echo "$end_time - $start_time" | bc)
+    
+    log_trace "INFO" "FETCH" "Alpha Vantage quote | Latency: ${latency}s"
     
     # SAFETY: Check for the Alpha Vantage "Note" (Rate Limit Message)
     if echo "$quote_response" | grep -q "Thank you for using Alpha Vantage"; then
+        log_trace "WARN" "FETCH" "Alpha Vantage rate limit reached"
         echo "  ❌ Alpha Vantage Limit Reached (Daily or Minute). Skipping price data."
         return 1
     fi
@@ -89,12 +109,17 @@ fetch_alpha_vantage() {
 # Get CIK from SEC
 # ============================================
 fetch_sec_cik() {
+    log_trace "INFO" "FETCH" "Looking up SEC CIK"
     echo "  🔍 Looking up SEC CIK..."
     
+    local start_time=$(date +%s.%N)
     local cik_lookup=$(curl -s --max-time 15 \
         -H "User-Agent: $USER_AGENT" \
         "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${TICKER_UPPER}&type=10-K&dateb=&owner=include&count=1&output=atom" 2>/dev/null || echo "")
+    local end_time=$(date +%s.%N)
+    local latency=$(echo "$end_time - $start_time" | bc)
     
+    log_trace "INFO" "FETCH" "SEC CIK lookup | Latency: ${latency}s"
     CIK=$(echo "$cik_lookup" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
     
     if [ -z "$CIK" ]; then

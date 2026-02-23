@@ -13,6 +13,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/cache.sh"
 source "$SCRIPT_DIR/lib/cost-tracker.sh"
 source "$SCRIPT_DIR/lib/api-client.sh"
+source "$SCRIPT_DIR/lib/trace.sh"
+
+# Initialize trace
+init_trace
+log_trace "INFO" "$FW_ID" "Framework execution starting"
 
 # Parse arguments
 TICKER="${1:-}"
@@ -27,6 +32,10 @@ if [ -z "$TICKER" ] || [ -z "$FW_ID" ] || [ -z "$PROMPT_FILE" ]; then
 fi
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
+
+# Initialize trace
+init_trace
+log_trace "INFO" "$FW_ID" "Framework execution starting for $TICKER_UPPER"
 
 # Validate inputs
 if [ ! -f "$PROMPT_FILE" ]; then
@@ -49,17 +58,20 @@ CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 
 # Check cache first
 echo "🔍 Checking cache for $FW_ID..."
+log_trace "INFO" "$FW_ID" "Checking cache"
 CACHED_RESPONSE=$(cache_get "$CACHE_KEY")
 
 if [ -n "$CACHED_RESPONSE" ]; then
     AGE_DAYS=$(cache_age "$CACHE_KEY")
     echo "✅ Cache HIT for $FW_ID (${AGE_DAYS} days old)"
+    log_trace "INFO" "$FW_ID" "Cache HIT | Age: ${AGE_DAYS}d | Cost: $0.00"
     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
     echo "💰 $FW_ID: $0.00 (cached)"
     exit 0
 fi
 
 echo "📝 Cache MISS for $FW_ID - calling API..."
+log_trace "INFO" "$FW_ID" "Cache MISS - calling API"
 
 # Check budget before API call
 if ! check_budget "$FW_ID"; then
@@ -72,6 +84,7 @@ API_RESPONSE=$(call_moonshot_api "$FULL_PROMPT")
 
 if [ $? -ne 0 ]; then
     echo "❌ API call failed for $FW_ID"
+    log_trace "ERROR" "$FW_ID" "API call failed after retries"
     exit 1
 fi
 
@@ -84,6 +97,7 @@ echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 
 # Log cost
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
+log_trace "INFO" "$FW_ID" "Complete | Tokens: ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
 # Cache the response
 cache_set "$CACHE_KEY" "$CONTENT" "{\"ticker\": \"$TICKER_UPPER\", \"framework\": \"$FW_ID\", \"tokens\": {\"input\": $INPUT_TOKENS, \"output\": $OUTPUT_TOKENS}}"
