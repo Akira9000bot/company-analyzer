@@ -32,6 +32,7 @@ validate_api_key() {
 
 call_moonshot_api() {
     local prompt="$1"
+    local max_tokens="${2:-800}"
     local attempt=1
     local delay=$RETRY_DELAY_BASE
     
@@ -40,7 +41,8 @@ call_moonshot_api() {
     local json_payload=$(jq -n \
         --arg model "$MODEL" \
         --arg content "$prompt" \
-        '{model: $model, messages: [{role: "user", content: $content}]}')
+        --argjson max_tokens "$max_tokens" \
+        '{model: $model, messages: [{role: "user", content: $content}], max_tokens: $max_tokens}')
     
     while [ $attempt -le $MAX_RETRIES ]; do
         log_trace "API" "${FW_ID:-CMD}" "Calling Moonshot (Attempt $attempt)..."

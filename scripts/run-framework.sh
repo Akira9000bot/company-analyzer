@@ -21,6 +21,18 @@ FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$(dirname "$SCRIPT_DIR")/assets/outputs}"
 
+# Framework-specific max_tokens limits (aggressive output constraints)
+declare -A MAX_TOKENS=(
+    ["01-phase"]=600
+    ["02-metrics"]=800
+    ["03-ai-moat"]=800
+    ["04-strategic-moat"]=900
+    ["05-sentiment"]=700
+    ["06-growth"]=800
+    ["07-business"]=800
+    ["08-risk"]=700
+)
+
 # Initialize trace after parsing args
 init_trace
 log_trace "INFO" "$FW_ID" "Framework execution starting"
@@ -75,8 +87,11 @@ if ! check_budget "$FW_ID"; then
     exit 1
 fi
 
-# Call API with retry logic
-API_RESPONSE=$(call_moonshot_api "$FULL_PROMPT")
+# Get max_tokens for this framework (default 800)
+FW_MAX_TOKENS="${MAX_TOKENS[$FW_ID]:-800}"
+
+# Call API with retry logic and token limit
+API_RESPONSE=$(call_moonshot_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 
 if [ $? -ne 0 ]; then
     echo "❌ API call failed for $FW_ID"

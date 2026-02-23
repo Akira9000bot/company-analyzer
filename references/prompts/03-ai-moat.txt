@@ -10,3 +10,5 @@ Four Lenses:
 4. Network: Proprietary data = Antifragile
 
 Rate each lens and provide overall verdict with critical failure point.
+
+⚠️ STRICT OUTPUT CONSTRAINT: 4 lens ratings + 1 verdict sentence. Max 500 tokens. No elaboration.

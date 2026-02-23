@@ -12,3 +12,5 @@ Score these metrics:
 - Cash position
 
 Provide 1-2 sentence insight on overall health.
+
+⚠️ STRICT OUTPUT CONSTRAINT: Use table format only. Max 500 tokens. No prose explanations beyond table and 1 summary sentence.

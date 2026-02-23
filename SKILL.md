@@ -130,8 +130,15 @@ All analyses saved to `assets/outputs/`:
 | Mode | Time | Cost |
 |------|------|------|
 | Sequential (old) | ~20s | $0.04 |
-| Parallel (8 frameworks) | ~4s | **~$0.03** |
+| Parallel (8 frameworks, unlimited) | ~4s | ~$0.045 |
+| **Parallel (token-limited)** | ~4s | **~$0.018** |
 | Cached | ~1s | $0.00 |
+
+**Token Limits Applied:**
+- API-level `max_tokens` enforced per framework
+- Prompt-level strict output constraints
+- Average output reduced from ~1,600 to ~700 tokens
+- **60% cost reduction** vs unlimited output
 
 ## Troubleshooting
 

@@ -10,3 +10,5 @@ Analyze:
 - Product cross-sell
 
 Determine if growth is driven by new customers or existing customer expansion.
+
+⚠️ STRICT OUTPUT CONSTRAINT: Primary driver + 2 bullet points. Max 500 tokens. Be concise.

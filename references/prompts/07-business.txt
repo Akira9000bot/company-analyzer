@@ -11,3 +11,5 @@ Analyze:
 - Path to profitability
 
 Provide assessment of business model health and scalability.
+
+⚠️ STRICT OUTPUT CONSTRAINT: 3 bullet points max. Max 500 tokens. Focus on key metric only.

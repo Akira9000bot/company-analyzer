@@ -10,3 +10,5 @@ Analyze based on:
 - Market position
 
 Provide classification and brief evidence.
+
+⚠️ STRICT OUTPUT CONSTRAINT: Respond in 3 bullet points max. Maximum 400 tokens. Be concise.

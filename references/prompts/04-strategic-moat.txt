@@ -11,3 +11,5 @@ Evaluate:
 - Barriers to entry
 
 Provide moat rating and primary competitive threats.
+
+⚠️ STRICT OUTPUT CONSTRAINT: Moat rating + 3 bullet points max. Max 550 tokens. Be direct.

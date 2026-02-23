@@ -11,3 +11,5 @@ Consider:
 - Narrative drivers
 
 Provide valuation and sentiment assessment with brief rationale.
+
+⚠️ STRICT OUTPUT CONSTRAINT: Valuation + Sentiment + 1 sentence each. Max 450 tokens. No fluff.

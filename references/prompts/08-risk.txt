@@ -11,3 +11,5 @@ Assess:
 - Regulatory/legal risks
 
 Provide top 3 risks ranked by severity with brief mitigation strategies.
+
+⚠️ STRICT OUTPUT CONSTRAINT: 3 risks only (Risk: 1 sentence + Mitigation: 1 sentence). Max 450 tokens.
