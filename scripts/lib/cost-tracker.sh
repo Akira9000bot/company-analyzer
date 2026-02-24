@@ -1,45 +1,20 @@
 #!/bin/bash
-#
-# lib/cost-tracker.sh - Cost tracking and budget management
-#
+# lib/cost-tracker.sh - Dynamic Cost Tracking
 
-# Get skill root directory (2 levels up from lib/)
+# Get paths
 COST_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COST_SKILL_DIR="$(cd "$COST_LIB_DIR/../.." && pwd)"
-COST_CACHE_DIR="$COST_SKILL_DIR/.cache"
-COST_LOG="$COST_CACHE_DIR/costs.log"
+PRICES_FILE="$COST_LIB_DIR/prices.json"
+CONFIG_FILE="${HOME}/.openclaw/openclaw.json"
+COST_LOG="$COST_SKILL_DIR/.cache/costs.log"
 DAILY_BUDGET=0.10
 
-# Initialize cost log
 init_cost_tracker() {
-    mkdir -p "$COST_CACHE_DIR"
+    mkdir -p "$(dirname "$COST_LOG")"
     touch "$COST_LOG"
 }
 
-# Check if running within budget
-# Returns: 0 always (budget protection disabled)
-# Usage: check_budget [framework_name]
-check_budget() {
-    local framework="${1:-}"
-    local today=$(date -u +%Y-%m-%d)
-    
-    init_cost_tracker
-    
-    # Calculate today's spend for logging only
-    local spent=$(grep "^${today}T" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
-    [ -z "$spent" ] && spent="0"
-    
-    # Log spend but don't enforce limit
-    echo "💳 Spent today: \$$spent (no budget limit)"
-    
-    if [ -n "$framework" ]; then
-        echo "   Framework: $framework"
-    fi
-    
-    return 0
-}
-
-# Log API call cost
+# Log API call cost with Dynamic Price Lookup
 # Usage: log_cost <ticker> <framework> <input_tokens> <output_tokens>
 log_cost() {
     local ticker="$1"
@@ -48,86 +23,37 @@ log_cost() {
     local output_tokens="$4"
     
     init_cost_tracker
+
+    # 1. Determine active model from OpenClaw config
+    local active_model=$(jq -r '.agents.defaults.model.primary // "google/gemini-3-flash-preview"' "$CONFIG_FILE")
     
+    # 2. Lookup prices for that specific model
+    local in_rate=$(jq -r ".\"$active_model\".input // 0.10" "$PRICES_FILE")
+    local out_rate=$(jq -r ".\"$active_model\".output // 0.40" "$PRICES_FILE")
+
+    # 3. Calculate (Scale 6 for high precision on pennies)
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    # Gemini 2.0 Flash pricing: $0.075/M input, $0.30/M output
-    local input_cost=$(echo "scale=6; $input_tokens * 0.075 / 1000000" | bc)
-    local output_cost=$(echo "scale=6; $output_tokens * 0.30 / 1000000" | bc)
+    local input_cost=$(echo "scale=6; $input_tokens * $in_rate / 1000000" | bc)
+    local output_cost=$(echo "scale=6; $output_tokens * $out_rate / 1000000" | bc)
     local total_cost=$(echo "scale=6; $input_cost + $output_cost" | bc)
     
-    echo "$timestamp | $ticker | $framework | gemini-2.0-flash | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
-    echo "  💰 $framework: \$$total_cost (${input_tokens}i/${output_tokens}o tokens)"
+    # 4. Save to log
+    echo "$timestamp | $ticker | $framework | $active_model | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
+    echo "  💰 $framework: \$$total_cost (Model: $active_model)"
 }
 
-# Get daily spend amount
-# Usage: get_daily_spend [date]
-# Returns: amount spent (e.g., "0.0423")
-get_daily_spend() {
-    local date_str="${1:-$(date -u +%Y-%m-%d)}"
-    
-    if [ ! -f "$COST_LOG" ]; then
-        echo "0"
-        return 0
-    fi
-    
-    local spent=$(grep "^${date_str}T" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
-    [ -z "$spent" ] && spent="0"
-    
-    echo "$spent"
-}
-
-# Get cost summary
 # Usage: cost_summary
 cost_summary() {
-    if [ ! -f "$COST_LOG" ]; then
-        echo "No cost data logged yet"
-        return 0
-    fi
+    [ ! -f "$COST_LOG" ] && { echo "No data."; return 0; }
     
     local today=$(date -u +%Y-%m-%d)
-    local today_spent=$(get_daily_spend "$today")
-    local total_spent=$(grep -oE '\$[0-9.]+' "$COST_LOG" 2>/dev/null | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
+    local spent=$(grep "^${today}T" "$COST_LOG" | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
+    [ -z "$spent" ] && spent="0"
     
-    echo "Cost Summary:"
-    echo "  Today: \$$today_spent / \$$DAILY_BUDGET"
-    echo "  Total (all time): \$$total_spent"
-    echo "  Log: $COST_LOG"
+    echo "--- DAILY BUDGET TRACKER ---"
+    echo "  Today: \$$spent / \$$DAILY_BUDGET"
 }
 
-# Show detailed cost history
-# Usage: cost_history [limit]
-cost_history() {
-    local limit="${1:-50}"
-    
-    if [ ! -f "$COST_LOG" ]; then
-        echo "No cost data logged yet"
-        return 0
-    fi
-    
-    echo "=== Cost History (last $limit entries) ==="
-    tail -n "$limit" "$COST_LOG"
-    echo ""
-    echo "=== Total Spent ==="
-    grep -oE '\$[0-9.]+' "$COST_LOG" | sed 's/\$//' | awk '{sum+=$1} END {printf "\$%.4f\n", sum}'
-}
-
-# Estimate cost for tokens
-# Usage: estimate_cost <input_tokens> <output_tokens>
-estimate_cost() {
-    local input_tokens="$1"
-    local output_tokens="$2"
-    
-    local input_cost=$(echo "scale=6; $input_tokens * 0.60 / 1000000" | bc)
-    local output_cost=$(echo "scale=6; $output_tokens * 3.00 / 1000000" | bc)
-    local total_cost=$(echo "scale=6; $input_cost + $output_cost" | bc)
-    
-    echo "Cost estimate for $input_tokens input / $output_tokens output tokens:"
-    echo "  Input:  \$$input_cost"
-    echo "  Output: \$$output_cost"
-    echo "  Total:  \$$total_cost"
-}
-
-# Export functions if sourced
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export -f init_cost_tracker check_budget log_cost get_daily_spend cost_summary cost_history estimate_cost
+    export -f init_cost_tracker log_cost cost_summary
 fi
