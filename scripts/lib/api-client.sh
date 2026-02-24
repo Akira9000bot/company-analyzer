@@ -1,41 +1,46 @@
 #!/bin/bash
 #
-# lib/api-client.sh - Google Gemini API client with retry logic and rate limiting
+# lib/api-client.sh - High-performance Gemini 3 Flash client for Tier 1 Paid
+# Optimized for your $400,000 portfolio analysis pipeline.
 #
 
 # Source tracing library
 source "$(dirname "${BASH_SOURCE[0]}")/trace.sh"
 
+# 1. API Configuration
+# Pointing to Gemini 3 Flash Preview (Tier 1 Paid: $0.10/$0.40 per 1M tokens)
+MODEL="gemini-3-flash-preview"
+API_URL="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
+
+# 2. Authentication
 AUTH_PROFILES="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
 if [ -f "$AUTH_PROFILES" ]; then
+    # Prioritize google:default profile
     GEMINI_API_KEY=$(jq -r '.profiles["google:default"].key // .profiles["gemini:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
     export GEMINI_API_KEY
 fi
 
-API_URL="https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-MODEL="gemini-2.0-flash"
+# 3. Resilience Configuration
 MAX_RETRIES=3
 RETRY_DELAY_BASE=2
 
-# Rate limiting for Gemini Free Tier (15 requests/minute)
+# 4. Rate Limiting (Upgraded to Tier 1 Paid Limits)
+# Free tier is 15 RPM; Tier 1 Paid is 300 RPM. We use 250 as a safe buffer.
 GEMINI_REQ_COUNT=0
 GEMINI_REQ_WINDOW_START=$(date +%s)
-GEMINI_MAX_RPM=15
+GEMINI_MAX_RPM=250 
 
 check_api_key() {
     if [ -z "${GEMINI_API_KEY:-}" ]; then
-        log_trace "ERROR" "API" "GEMINI_API_KEY not set"
+        log_trace "ERROR" "API" "GEMINI_API_KEY not set. Check your auth-profiles.json."
         return 1
     fi
     return 0
 }
 
 # Alias for backward compatibility
-validate_api_key() {
-    check_api_key
-}
+validate_api_key() { check_api_key; }
 
-# Check and enforce rate limit
 enforce_rate_limit() {
     local now=$(date +%s)
     local window_elapsed=$((now - GEMINI_REQ_WINDOW_START))
@@ -49,9 +54,8 @@ enforce_rate_limit() {
     # If at limit, wait until window resets
     if [ $GEMINI_REQ_COUNT -ge $GEMINI_MAX_RPM ]; then
         local wait_time=$((60 - window_elapsed + 1))
-        log_trace "WARN" "RATE" "Rate limit reached. Waiting ${wait_time}s..."
+        log_trace "WARN" "RATE" "Burst limit approaching. Pausing ${wait_time}s..."
         sleep $wait_time
-        # Reset after wait
         GEMINI_REQ_COUNT=0
         GEMINI_REQ_WINDOW_START=$(date +%s)
     fi
@@ -59,7 +63,8 @@ enforce_rate_limit() {
     GEMINI_REQ_COUNT=$((GEMINI_REQ_COUNT + 1))
 }
 
-call_gemini_api() {
+# The Master LLM Function
+call_llm_api() {
     local prompt="$1"
     local max_tokens="${2:-800}"
     local attempt=1
@@ -67,10 +72,9 @@ call_gemini_api() {
     
     if ! check_api_key; then return 1; fi
     
-    # Enforce rate limit before calling
     enforce_rate_limit
     
-    # Build JSON payload for Gemini API
+    # Payload optimized for cost control (maxOutputTokens) and precision (temperature)
     local json_payload=$(jq -n \
         --arg text "$prompt" \
         --argjson max_tokens "$max_tokens" \
@@ -83,8 +87,7 @@ call_gemini_api() {
         }')
     
     while [ $attempt -le $MAX_RETRIES ]; do
-        log_trace "API" "${FW_ID:-CMD}" "Calling Gemini (Attempt $attempt)..."
-        dump_raw "${TICKER_UPPER:-GLOBAL}" "${FW_ID:-CMD}" "req" "$json_payload"
+        log_trace "API" "${FW_ID:-CMD}" "Calling ${MODEL} (Attempt $attempt)..."
         
         local start_time=$(date +%s.%N)
         local response=$(curl -s --max-time 60 -X POST "${API_URL}?key=${GEMINI_API_KEY}" \
@@ -97,21 +100,16 @@ call_gemini_api() {
         local http_code=$(echo "$response" | tail -n1)
         local body=$(echo "$response" | sed '$d')
         
-        dump_raw "${TICKER_UPPER:-GLOBAL}" "${FW_ID:-CMD}" "res" "$body"
-        
         if [ "$http_code" = "200" ]; then
             log_trace "API" "${FW_ID:-CMD}" "SUCCESS | Latency: ${latency}s"
             echo "$body"
             return 0
         fi
         
-        # Check for rate limit (429)
+        # 429 is common during parallel bursts
         if [ "$http_code" = "429" ]; then
-            log_trace "WARN" "${FW_ID:-CMD}" "Rate limited (429). Waiting 60s..."
-            sleep 60
-            # Reset rate limit tracking
-            GEMINI_REQ_COUNT=0
-            GEMINI_REQ_WINDOW_START=$(date +%s)
+            log_trace "WARN" "${FW_ID:-CMD}" "Rate limited (429). Retrying in 5s..."
+            sleep 5
             attempt=$((attempt + 1))
             continue
         fi
@@ -129,35 +127,27 @@ call_gemini_api() {
     return 1
 }
 
-# Keep function name for backward compatibility
-call_moonshot_api() {
-    call_gemini_api "$@"
-}
+# --- Aliases for Backward Compatibility ---
+call_gemini_api() { call_llm_api "$@"; }
+call_moonshot_api() { call_llm_api "$@"; }
 
 extract_content() {
+    # Handles Gemini's specific JSON structure
     echo "$1" | jq -r '.candidates[0].content.parts[0].text // empty'
 }
 
 extract_usage() {
-    # Gemini provides token counts differently
     local input=$(echo "$1" | jq -r '.usageMetadata.promptTokenCount // 0')
     local output=$(echo "$1" | jq -r '.usageMetadata.candidatesTokenCount // 0')
-    # Handle case where usageMetadata might be missing
-    if [ "$input" = "null" ] || [ -z "$input" ]; then
-        input=0
-    fi
-    if [ "$output" = "null" ] || [ -z "$output" ]; then
-        output=0
-    fi
+    # Cleanup nulls
+    [ "$input" = "null" ] && input=0
+    [ "$output" = "null" ] && output=0
     echo "$input $output"
 }
 
-# Alias for backward compatibility
-extract_tokens() {
-    extract_usage "$@"
-}
+extract_tokens() { extract_usage "$@"; }
 
 # Export functions if sourced
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export -f check_api_key validate_api_key call_gemini_api call_moonshot_api extract_content extract_usage extract_tokens enforce_rate_limit
+    export -f check_api_key call_llm_api call_gemini_api call_moonshot_api extract_content extract_usage extract_tokens enforce_rate_limit
 fi

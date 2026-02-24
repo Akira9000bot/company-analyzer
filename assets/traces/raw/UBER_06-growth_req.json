@@ -1,10 +1,15 @@
 {
-  "model": "kimi-k2.5",
-  "messages": [
+  "contents": [
     {
-      "role": "user",
-      "content": "Company: UBER\n\nROLE: Growth Strategist\nTASK: Identify primary growth drivers\nDATA: Use provided data only — no additional research\nOUTPUT: New customer acquisition vs existing expansion breakdown\n\nAnalyze:\n- Dollar net retention rate\n- Customer growth (new logos)\n- Expansion revenue vs new revenue\n- Product cross-sell\n\nDetermine if growth is driven by new customers or existing customer expansion.\n\n⚠️ STRICT OUTPUT CONSTRAINT: Primary driver + 2 bullet points. Max 500 tokens. Be concise."
+      "parts": [
+        {
+          "text": "Company: UBER\n\nROLE: Growth Strategist\nTASK: Identify primary growth drivers\nDATA: Use provided data only — no additional research\nOUTPUT: New customer acquisition vs existing expansion breakdown\n\nAnalyze:\n- Dollar net retention rate\n- Customer growth (new logos)\n- Expansion revenue vs new revenue\n- Product cross-sell\n\nDetermine if growth is driven by new customers or existing customer expansion.\n\n⚠️ STRICT OUTPUT CONSTRAINT: Primary driver + 2 bullet points. Max 500 tokens. Be concise."
+        }
+      ]
     }
   ],
-  "max_tokens": 1400
+  "generationConfig": {
+    "maxOutputTokens": 800,
+    "temperature": 0.3
+  }
 }

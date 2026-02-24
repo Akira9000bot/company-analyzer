@@ -1,121 +1,77 @@
 #!/bin/bash
-#
-# run-framework.sh - Run a single framework with caching support
-# Usage: ./run-framework.sh <ticker> <fw_id> <prompt_file> [output_dir]
-#
+# run-framework.sh - Final Merge: Budget Safety + Data Efficiency
 
 set -euo pipefail
 
-# Get script directory
+# 1. Environment Setup
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Source libraries
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/lib/cache.sh"
 source "$SCRIPT_DIR/lib/cost-tracker.sh"
 source "$SCRIPT_DIR/lib/api-client.sh"
 source "$SCRIPT_DIR/lib/trace.sh"
 
-# Parse arguments
+# 2. Argument Parsing & Defaults
 TICKER="${1:-}"
 FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
-OUTPUT_DIR="${4:-$(dirname "$SCRIPT_DIR")/assets/outputs}"
+OUTPUT_DIR="${4:-$SKILL_DIR/assets/outputs}"
+LIMIT_ARG="${5:-}" # Passed from analyze-parallel.sh
 
-# Framework-specific max_tokens limits (Gemini - no reasoning overhead)
-# All tokens go directly to output content
+# Fallback internal map if $5 is empty
 declare -A MAX_TOKENS=(
-    ["01-phase"]=600
-    ["02-metrics"]=800
-    ["03-ai-moat"]=800
-    ["04-strategic-moat"]=900
-    ["05-sentiment"]=700
-    ["06-growth"]=800
-    ["07-business"]=800
-    ["08-risk"]=700
+    ["01-phase"]=600 ["02-metrics"]=800 ["03-ai-moat"]=800 
+    ["04-strategic-moat"]=900 ["05-sentiment"]=700 ["06-growth"]=800 
+    ["07-business"]=800 ["08-risk"]=700
 )
+FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
 
-# Initialize trace after parsing args
-init_trace
-log_trace "INFO" "$FW_ID" "Framework execution starting"
-
-if [ -z "$TICKER" ] || [ -z "$FW_ID" ] || [ -z "$PROMPT_FILE" ]; then
-    echo "Usage: $0 <ticker> <fw_id> <prompt_file> [output_dir]"
-    echo "Example: $0 AAPL 01-phase /path/to/01-phase.txt"
-    exit 1
-fi
-
+# 3. Data Segmenting (THE BIG COST SAVER)
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
+DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
 
-# Validate inputs
-if [ ! -f "$PROMPT_FILE" ]; then
-    echo "❌ Prompt file not found: $PROMPT_FILE"
-    exit 1
-fi
+get_relevant_context() {
+    if [ ! -f "$DATA_FILE" ]; then echo "{}"; return; fi
+    case "$FW_ID" in
+        "07-business"|"03-ai-moat") jq -r '.sec_data.item1 // .full_text[:15000]' "$DATA_FILE" ;;
+        "08-risk") jq -r '.sec_data.item1a // .full_text[:15000]' "$DATA_FILE" ;;
+        "01-phase"|"02-metrics") jq -c '.financial_metrics' "$DATA_FILE" ;;
+        *) jq -r '.full_text[:10000]' "$DATA_FILE" ;;
+    esac
+}
 
+# 4. Initialization & Cache Check
+init_trace
 mkdir -p "$OUTPUT_DIR"
-
-# Read framework prompt
-FRAMEWORK_PROMPT=$(cat "$PROMPT_FILE")
-
-# Build full prompt with company context
-FULL_PROMPT="Company: $TICKER_UPPER
-
-$FRAMEWORK_PROMPT"
-
-# Generate cache key
+CONTEXT=$(get_relevant_context)
+PROMPT_CONTENT=$(cat "$PROMPT_FILE")
+FULL_PROMPT="Company: $TICKER_UPPER\n\nData: $CONTEXT\n\nInstructions: $PROMPT_CONTENT"
 CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 
-# Check cache first
-echo "🔍 Checking cache for $FW_ID..."
-log_trace "INFO" "$FW_ID" "Checking cache"
-CACHED_RESPONSE=$(cache_get "$CACHE_KEY" 2>/dev/null) || true
-
+CACHED_RESPONSE=$(cache_get "$CACHE_KEY")
 if [ -n "$CACHED_RESPONSE" ]; then
-    AGE_DAYS=$(cache_age "$CACHE_KEY")
-    echo "✅ Cache HIT for $FW_ID (${AGE_DAYS} days old)"
-    log_trace "INFO" "$FW_ID" "Cache HIT | Age: ${AGE_DAYS}d | Cost: $0.00"
     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-    echo "💰 $FW_ID: $0.00 (cached)"
+    log_trace "INFO" "$FW_ID" "Cache HIT | Age: $(cache_age "$CACHE_KEY")d"
     exit 0
 fi
 
-echo "📝 Cache MISS for $FW_ID - calling API..."
-log_trace "INFO" "$FW_ID" "Cache MISS - calling API"
-
-# Check budget before API call
+# 5. API Execution with Budget Guard
 if ! check_budget "$FW_ID"; then
-    echo "❌ Budget check failed for $FW_ID"
+    log_trace "ERROR" "$FW_ID" "Budget check failed"
     exit 1
 fi
 
-# Get max_tokens for this framework (default 800)
-FW_MAX_TOKENS="${MAX_TOKENS[$FW_ID]:-800}"
-
-# Call API with retry logic and token limit
-API_RESPONSE=$(call_moonshot_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
-
-if [ $? -ne 0 ]; then
-    echo "❌ API call failed for $FW_ID"
-    log_trace "ERROR" "$FW_ID" "API call failed after retries"
-    exit 1
-fi
-
-# Extract content and usage
+API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< $(extract_usage "$API_RESPONSE")
 
-# Save output
+# 6. Save & Log
 echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-
-# Log cost
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
-log_trace "INFO" "$FW_ID" "Complete | Tokens: ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
+log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
-# Cache the response (best effort - don't fail if caching breaks)
-if [ -n "$INPUT_TOKENS" ] && [ -n "$OUTPUT_TOKENS" ]; then
-    METADATA=$(jq -n --arg ticker "$TICKER_UPPER" --arg fw "$FW_ID" --argjson input "$INPUT_TOKENS" --argjson output "$OUTPUT_TOKENS" '{ticker: $ticker, framework: $fw, tokens: {input: $input, output: $output}}' 2>/dev/null) || METADATA="{}"
-    cache_set "$CACHE_KEY" "$(cat "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md")" "$METADATA" 2>/dev/null || log_trace "WARN" "$FW_ID" "Cache write failed"
-fi
+# Save to cache with metadata (your production requirement)
+METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
+cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
 
 echo "✅ $FW_ID complete"
-exit 0

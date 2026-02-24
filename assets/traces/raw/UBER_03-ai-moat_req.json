@@ -1,10 +1,15 @@
 {
-  "model": "kimi-k2.5",
-  "messages": [
+  "contents": [
     {
-      "role": "user",
-      "content": "Company: UBER\n\nROLE: AI Moat Strategist\nTASK: Rate AI moat viability using Four Lenses\nDATA: Use provided data only — no additional research\nOUTPUT: Fragile/Robust/Antifragile rating with brief justification\n\nFour Lenses:\n1. Liability: High stakes = Antifragile\n2. Business Model: Usage-based = Antifragile\n3. Physical: Hard infrastructure = Robust\n4. Network: Proprietary data = Antifragile\n\nRate each lens and provide overall verdict with critical failure point.\n\n⚠️ STRICT OUTPUT CONSTRAINT: 4 lens ratings + 1 verdict sentence. Max 500 tokens. No elaboration."
+      "parts": [
+        {
+          "text": "Company: UBER\n\nROLE: AI Moat Strategist\nTASK: Rate AI moat viability using Four Lenses\nDATA: Use provided data only — no additional research\nOUTPUT: Fragile/Robust/Antifragile rating with brief justification\n\nFour Lenses:\n1. Liability: High stakes = Antifragile\n2. Business Model: Usage-based = Antifragile\n3. Physical: Hard infrastructure = Robust\n4. Network: Proprietary data = Antifragile\n\nRate each lens and provide overall verdict with critical failure point.\n\n⚠️ STRICT OUTPUT CONSTRAINT: 4 lens ratings + 1 verdict sentence. Max 500 tokens. No elaboration."
+        }
+      ]
     }
   ],
-  "max_tokens": 1400
+  "generationConfig": {
+    "maxOutputTokens": 800,
+    "temperature": 0.3
+  }
 }
