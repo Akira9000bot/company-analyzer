@@ -1,11 +1,6 @@
 #!/bin/bash
 #
-# fetch_data.sh - Free data acquisition with Alpha Vantage + SEC EDGAR fallback
-# Fetches real financial data for company analysis
-#
-# Priority:
-#   1. Alpha Vantage (free tier: 25 calls/day) - for price data (market cap, P/E)
-#   2. SEC EDGAR API - for financial metrics
+# fetch_data.sh - Enhanced data acquisition with Narrative Text Extraction
 #
 
 set -euo pipefail
@@ -19,9 +14,8 @@ TICKER="${1:-}"
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 
-# Get skill root directory for cache location
-FETCH_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FETCH_SKILL_DIR="$(cd "$FETCH_SCRIPT_DIR/.." && pwd)"
+# Cache location setup
+FETCH_SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DATA_DIR="$FETCH_SKILL_DIR/.cache/data"
 DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
 SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
@@ -29,34 +23,24 @@ AV_FILE="$DATA_DIR/${TICKER_UPPER}_av_raw.json"
 
 mkdir -p "$DATA_DIR"
 
-# Load Alpha Vantage API key from auth profiles
+# Load Alpha Vantage API key
 AUTH_PROFILES="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
 ALPHA_VANTAGE_KEY=""
 if [ -f "$AUTH_PROFILES" ]; then
     ALPHA_VANTAGE_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // .profiles["alphavantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
 fi
 
-# Check if data already exists (1-day cache for fresh data)
+# 1-day cache check
 if [ -f "$DATA_FILE" ]; then
     AGE_HOURS=$(( ( $(date +%s) - $(stat -c %Y "$DATA_FILE" 2>/dev/null || echo 0) ) / 3600 ))
     if [ $AGE_HOURS -lt 24 ]; then
         echo "✅ Using cached data (${AGE_HOURS}h old)"
-        echo "   $DATA_FILE"
         exit 0
     fi
 fi
 
-# Source tracing library
-source "$(dirname "${BASH_SOURCE[0]}")/lib/trace.sh"
-
 echo "📊 Fetching data for $TICKER_UPPER..."
-log_trace "INFO" "FETCH" "Starting data fetch for $TICKER_UPPER"
-
-# Initialize trace
 init_trace
-log_trace "INFO" "FETCH" "Starting data fetch for $TICKER_UPPER"
-
-# Set a user agent as required by SEC
 USER_AGENT="akira9000bot@gmail.com"
 
 # ============================================
@@ -230,10 +214,51 @@ fetch_yahoo_finance_fallback() {
 }
 
 # ============================================
-# Main data fetching
+# NEW: Fetch narrative text (10-K/10-Q)
 # ============================================
+fetch_sec_text() {
+    echo "  🔍 Fetching narrative text from SEC EDGAR..."
+    
+    # CIK may have leading zeros (bash treats as octal). Strip them for printf.
+    local clean_cik=$(echo "$CIK" | sed 's/^0*//')
+    [ -z "$clean_cik" ] && clean_cik=0
+    local cik_padded=$(printf "%010d" "$clean_cik")
+    local submissions_url="https://data.sec.gov/submissions/CIK${cik_padded}.json"
+    local submissions_json=$(curl -s -H "User-Agent: $USER_AGENT" "$submissions_url")
+    
+    # 1. Find the index of the latest 10-K or 10-Q filing
+    local idx=$(echo "$submissions_json" | jq -r '.filings.recent.form | to_entries | .[] | select(.value == "10-K" or .value == "10-Q") | .key' | head -1)
+    
+    if [ -z "$idx" ] || [ "$idx" == "null" ]; then
+        echo "  ⚠️  No 10-K or 10-Q found in recent submissions."
+        ITEM1_TEXT="N/A"
+        ITEM1A_TEXT="N/A"
+        return 1
+    fi
+    
+    # 2. Construct the URL for the primary document
+    local acc_no=$(echo "$submissions_json" | jq -r ".filings.recent.accessionNumber[$idx]")
+    local primary_doc=$(echo "$submissions_json" | jq -r ".filings.recent.primaryDocument[$idx]")
+    local acc_no_clean=$(echo "$acc_no" | tr -d '-')
+    local filing_url="https://www.sec.gov/Archives/edgar/data/${CIK}/${acc_no_clean}/${primary_doc}"
+    
+    echo "  📂 Downloading Filing: $filing_url"
+    
+    # 3. Download and strip HTML tags to get clean text
+    local raw_html=$(curl -s -H "User-Agent: $USER_AGENT" "$filing_url")
+    local clean_text=$(echo "$raw_html" | sed 's/<[^>]*>/ /g' | tr -s ' ' | tr -d '\r')
+    
+    # 4. Use markers to isolate Item 1 and Item 1A (approximate bounds)
+    ITEM1_TEXT=$(echo "$clean_text" | grep -iP "Item 1\..*?Item 1A\." -o | head -c 35000 || echo "N/A")
+    ITEM1A_TEXT=$(echo "$clean_text" | grep -iP "Item 1A\..*?Item 1B\.|Item 2\." -o | head -c 35000 || echo "N/A")
 
-# Priority 1: Alpha Vantage (Valuation & Price)
+    echo "  ✅ Narrative text extracted (Item 1: ${#ITEM1_TEXT} chars, Item 1A: ${#ITEM1A_TEXT} chars)."
+}
+
+# ============================================
+# Execution Flow
+# ============================================
+# Priority 1: Market Data
 AV_SUCCESS=false
 if fetch_alpha_vantage; then
     AV_SUCCESS=true
@@ -246,7 +271,7 @@ else
     fi
 fi
 
-# Priority 2: SEC EDGAR (Always required for Financial DNA)
+# Priority 2: SEC Numeric and Narrative Data
 if ! fetch_sec_cik; then
     echo "  ❌ Cannot proceed without SEC CIK"
     exit 1
@@ -256,6 +281,8 @@ if ! fetch_sec_facts; then
     echo "  ❌ Cannot proceed without SEC data"
     exit 1
 fi
+
+fetch_sec_text # <--- NEW CALL
 
 # ============================================
 # Extract all data
@@ -276,14 +303,6 @@ SHARES_OUTSTANDING=$(extract_sec_value "$SEC_FILE" "shares" "CommonStockSharesOu
 
 # Alpha Vantage valuation data
 if [ "$AV_SUCCESS" = true ] && [ -f "$AV_FILE" ]; then
-    CURRENT_PRICE=$(extract_av_value "$AV_FILE" "MarketCapitalization" | awk '{print $1/1000000000}')
-    if [ "$CURRENT_PRICE" != "N/A" ]; then
-        # We got market cap, now get actual price
-        CURRENT_PRICE=$(curl -s --max-time 10 \
-            "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${TICKER_UPPER}&apikey=${ALPHA_VANTAGE_KEY}" 2>/dev/null | \
-            jq -r '.["Global Quote"]["05. price"] // "N/A"')
-    fi
-    
     MARKET_CAP=$(extract_av_value "$AV_FILE" "MarketCapitalization")
     PE_RATIO=$(extract_av_value "$AV_FILE" "PERatio")
     FORWARD_PE=$(extract_av_value "$AV_FILE" "ForwardPE")
@@ -291,8 +310,13 @@ if [ "$AV_SUCCESS" = true ] && [ -f "$AV_FILE" ]; then
     DIVIDEND_YIELD=$(extract_av_value "$AV_FILE" "DividendYield")
     FIFTY_TWO_WEEK_HIGH=$(extract_av_value "$AV_FILE" "52WeekHigh")
     FIFTY_TWO_WEEK_LOW=$(extract_av_value "$AV_FILE" "52WeekLow")
+    
+    # Ensure current price is set if coming from AV directly
+    if [ -z "${CURRENT_PRICE:-}" ]; then
+        CURRENT_PRICE=$(extract_av_value "$AV_FILE" "CurrentPrice" || echo "N/A")
+    fi
 else
-    CURRENT_PRICE="N/A"
+    CURRENT_PRICE="${CURRENT_PRICE:-N/A}"
     MARKET_CAP="N/A"
     PE_RATIO="N/A"
     FORWARD_PE="N/A"
@@ -310,92 +334,44 @@ rm -f "$SEC_FILE"
 # ============================================
 # Build JSON output
 # ============================================
-echo "  💾 Saving data..."
+echo "  💾 Saving enriched data..."
 
 jq -n \
     --arg ticker "$TICKER_UPPER" \
     --arg cik "$CIK" \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg company_name "$COMPANY_NAME" \
-    --arg revenue "$REVENUE" \
-    --arg net_income "$NET_INCOME" \
-    --arg total_assets "$TOTAL_ASSETS" \
-    --arg total_liabilities "$TOTAL_LIABILITIES" \
-    --arg stockholders_equity "$STOCKHOLDERS_EQUITY" \
-    --arg operating_income "$OPERATING_INCOME" \
-    --arg shares_outstanding "$SHARES_OUTSTANDING" \
-    --arg current_price "$CURRENT_PRICE" \
-    --arg market_cap "$MARKET_CAP" \
-    --arg pe_ratio "$PE_RATIO" \
-    --arg forward_pe "$FORWARD_PE" \
-    --arg eps "$EPS" \
-    --arg dividend_yield "$DIVIDEND_YIELD" \
-    --arg fifty_two_week_high "$FIFTY_TWO_WEEK_HIGH" \
-    --arg fifty_two_week_low "$FIFTY_TWO_WEEK_LOW" \
-    --arg av_success "$AV_SUCCESS" \
+    --arg name "$COMPANY_NAME" \
+    --arg rev "$REVENUE" \
+    --arg ni "$NET_INCOME" \
+    --arg assets "$TOTAL_ASSETS" \
+    --arg liab "$TOTAL_LIABILITIES" \
+    --arg equity "$STOCKHOLDERS_EQUITY" \
+    --arg op_inc "$OPERATING_INCOME" \
+    --arg shares "$SHARES_OUTSTANDING" \
+    --arg price "$CURRENT_PRICE" \
+    --arg cap "$MARKET_CAP" \
+    --arg pe "$PE_RATIO" \
+    --arg item1 "$ITEM1_TEXT" \
+    --arg item1a "$ITEM1A_TEXT" \
     '{
         ticker: $ticker,
         cik: $cik,
         timestamp: $timestamp,
-        company_profile: {
-            name: $company_name
-        },
+        company_profile: { name: $name },
         financial_metrics: {
-            revenue: $revenue,
-            net_income: $net_income,
-            total_assets: $total_assets,
-            total_liabilities: $total_liabilities,
-            stockholders_equity: $stockholders_equity,
-            operating_income: $operating_income,
-            shares_outstanding: $shares_outstanding
+            revenue: $rev,
+            net_income: $ni,
+            total_assets: $assets,
+            total_liabilities: $liab,
+            stockholders_equity: $equity,
+            operating_income: $op_inc,
+            shares_outstanding: $shares
         },
-        valuation: {
-            current_price: $current_price,
-            market_cap: $market_cap,
-            pe_ratio: $pe_ratio,
-            forward_pe: $forward_pe,
-            eps: $eps,
-            dividend_yield: $dividend_yield,
-            fifty_two_week_high: $fifty_two_week_high,
-            fifty_two_week_low: $fifty_two_week_low
-        },
-        data_sources: {
-            sec_edgar: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=\($ticker)",
-            alpha_vantage: (if $av_success == "true" then "success" else "not_available" end)
-        },
-        notes: (if $av_success == "true" 
-            then "Financial data from SEC EDGAR. Price/valuation data from Alpha Vantage." 
-            else "Financial data from SEC EDGAR only. Alpha Vantage unavailable (no API key or rate limit)."
-        end)
+        valuation: { current_price: $price, market_cap: $cap, pe_ratio: $pe },
+        sec_data: {
+            item1: $item1,
+            item1a: $item1a
+        }
     }' > "$DATA_FILE"
 
-# Display results
-echo ""
-echo "✅ Data fetched successfully for $TICKER_UPPER"
-echo "   File: $DATA_FILE"
-echo ""
-
-if [ "$REVENUE" != "N/A" ]; then
-    echo "📊 Financial Data (from SEC):"
-    [ "$COMPANY_NAME" != "N/A" ] && echo "   Company: $COMPANY_NAME"
-    echo "   Revenue: $REVENUE"
-    [ "$NET_INCOME" != "N/A" ] && echo "   Net Income: $NET_INCOME"
-    [ "$TOTAL_ASSETS" != "N/A" ] && echo "   Total Assets: $TOTAL_ASSETS"
-    [ "$OPERATING_INCOME" != "N/A" ] && echo "   Operating Income: $OPERATING_INCOME"
-    echo ""
-fi
-
-if [ "$AV_SUCCESS" = true ]; then
-    echo "💰 Valuation Data (from Alpha Vantage):"
-    [ "$CURRENT_PRICE" != "N/A" ] && echo "   Current Price: \$$CURRENT_PRICE"
-    [ "$MARKET_CAP" != "N/A" ] && echo "   Market Cap: $MARKET_CAP"
-    [ "$PE_RATIO" != "N/A" ] && echo "   P/E Ratio: $PE_RATIO"
-    [ "$FORWARD_PE" != "N/A" ] && echo "   Forward P/E: $FORWARD_PE"
-    echo ""
-else
-    echo "⚠️  Price/valuation data unavailable (Alpha Vantage not configured or rate limited)"
-    echo "   Analysis will use SEC financial data only."
-    echo ""
-fi
-
-echo "   Ready to run: ./analyze-parallel.sh $TICKER_UPPER --live"
+echo "✅ Finished: $DATA_FILE"
