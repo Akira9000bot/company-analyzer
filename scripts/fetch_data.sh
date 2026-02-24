@@ -1,152 +1,30 @@
 #!/bin/bash
-#
-# fetch_data.sh - Enhanced data acquisition with Narrative Text Extraction
-# Optimized for sequential pipeline and high-density analysis.
-#
-
+# fetch_data.sh - Dual-Agent Resilient Hybrid
 set -euo pipefail
 
-# Source tracing library
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/lib/trace.sh"
+TICKER_UPPER=$(echo "${1:-}" | tr '[:lower:]' '[:upper:]')
+[ -z "$TICKER_UPPER" ] && { echo "Usage: $0 <TICKER>"; exit 1; }
 
-TICKER="${1:-}"
-[ -z "$TICKER" ] && { echo "Usage: ./fetch_data.sh <TICKER>"; exit 1; }
-
-TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
-
-# Cache location setup
-FETCH_SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DATA_DIR="$FETCH_SKILL_DIR/.cache/data"
+DATA_DIR="$(dirname "$SCRIPT_DIR")/.cache/data"
 DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
+AV_RAW="$DATA_DIR/${TICKER_UPPER}_av_raw.json"
+Y_RAW="$DATA_DIR/${TICKER_UPPER}_yahoo_raw.json"
 SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
-AV_FILE="$DATA_DIR/${TICKER_UPPER}_av_raw.json"
-QUOTE_FILE="$DATA_DIR/${TICKER_UPPER}_quote_raw.json"
-
+COOKIE_FILE="$DATA_DIR/yahoo_cookie.txt"
 mkdir -p "$DATA_DIR"
 
-# Load Alpha Vantage API key
+# 🚨 THE FIX: Separate User Agents 
+# Yahoo requires a "Browser" agent. SEC requires a "Bot/Email" agent.
+YAHOO_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+SEC_AGENT="akira9000bot@gmail.com" # Required by SEC EDGAR guidelines
+
+# Load AV Key
 AUTH_PROFILES="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
-ALPHA_VANTAGE_KEY=""
-if [ -f "$AUTH_PROFILES" ]; then
-    ALPHA_VANTAGE_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // .profiles["alphavantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
-fi
-
-# 1-day cache check
-if [ -f "$DATA_FILE" ]; then
-    AGE_HOURS=$(( ( $(date +%s) - $(stat -c %Y "$DATA_FILE" 2>/dev/null || echo 0) ) / 3600 ))
-    if [ $AGE_HOURS -lt 24 ]; then
-        echo "✅ Using cached data (${AGE_HOURS}h old)"
-        exit 0
-    fi
-fi
-
-echo "📊 Fetching data for $TICKER_UPPER..."
-init_trace
-USER_AGENT="akira9000bot@gmail.com"
+AV_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || echo "")
 
 # ============================================
-# Alpha Vantage - Price and Valuation Data
-# ============================================
-fetch_alpha_vantage() {
-    log_trace "INFO" "FETCH" "Attempting Alpha Vantage fetch"
-    if [ -z "$ALPHA_VANTAGE_KEY" ]; then
-        log_trace "WARN" "FETCH" "Alpha Vantage key not found"
-        return 1
-    fi
-    
-    echo "  🔍 Fetching Alpha Vantage data..."
-    
-    # 1. Get quote data (for real-time price)
-    local quote_response=$(curl -s --max-time 15 \
-        "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${TICKER_UPPER}&apikey=${ALPHA_VANTAGE_KEY}")
-    
-    echo "$quote_response" > "$QUOTE_FILE"
-
-    if echo "$quote_response" | grep -q "Thank you for using Alpha Vantage"; then
-        log_trace "WARN" "FETCH" "Alpha Vantage rate limit reached"
-        return 1
-    fi
-
-    echo "  ⏳ Respecting API rate limits (12s pause)..."
-    sleep 12
-    
-    # 2. Get overview data (for P/E, Market Cap, description)
-    local overview_response=$(curl -s --max-time 15 \
-        "https://www.alphavantage.co/query?function=OVERVIEW&symbol=${TICKER_UPPER}&apikey=${ALPHA_VANTAGE_KEY}")
-    
-    echo "$overview_response" > "$AV_FILE"
-    
-    if echo "$overview_response" | jq -e '.Symbol' > /dev/null 2>&1; then
-        echo "  ✅ Alpha Vantage data retrieved"
-        return 0
-    else
-        return 1
-    fi
-}
-
-# ============================================
-# SEC Metadata & CIK Lookup
-# ============================================
-fetch_sec_cik() {
-    echo "  🔍 Looking up SEC CIK..."
-    local cik_lookup=$(curl -s --max-time 15 \
-        -H "User-Agent: $USER_AGENT" \
-        "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${TICKER_UPPER}&type=10-K&output=atom" 2>/dev/null || echo "")
-    
-    CIK=$(echo "$cik_lookup" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
-    if [ -z "$CIK" ]; then return 1; fi
-    echo "  ✅ Found CIK: $CIK"
-    return 0
-}
-
-fetch_sec_facts() {
-    echo "  🔍 Fetching company facts from SEC..."
-    local cik_padded=$(printf "%010d" "$(echo "$CIK" | sed 's/^0*//')" 2>/dev/null)
-    curl -s --max-time 30 -H "User-Agent: $USER_AGENT" \
-        "https://data.sec.gov/api/xbrl/companyfacts/CIK${cik_padded}.json" -o "$SEC_FILE" 2>/dev/null || return 1
-    return 0
-}
-
-# ============================================
-# NEW: Narrative Text Extraction Logic
-# ============================================
-fetch_sec_text() {
-    echo "  🔍 Extracting narrative text from latest filing..."
-    local cik_padded=$(printf "%010d" "$(echo "$CIK" | sed 's/^0*//')")
-    local sub_json=$(curl -s -H "User-Agent: $USER_AGENT" "https://data.sec.gov/submissions/CIK${cik_padded}.json")
-    
-    # Find latest 10-K or 10-Q index
-    local idx=$(echo "$sub_json" | jq -r '.filings.recent.form | to_entries | .[] | select(.value == "10-K" or .value == "10-Q") | .key' | head -1)
-    
-    if [ -z "$idx" ] || [ "$idx" == "null" ]; then
-        ITEM1_TEXT="N/A"; ITEM1A_TEXT="N/A"; return 1
-    fi
-    
-    local acc_no=$(echo "$sub_json" | jq -r ".filings.recent.accessionNumber[$idx]")
-    local primary_doc=$(echo "$sub_json" | jq -r ".filings.recent.primaryDocument[$idx]")
-    local acc_no_clean=$(echo "$acc_no" | tr -d '-')
-    local filing_url="https://www.sec.gov/Archives/edgar/data/${CIK}/${acc_no_clean}/${primary_doc}"
-    
-    echo "  📂 Downloading: $primary_doc"
-    local raw_html=$(curl -s -H "User-Agent: $USER_AGENT" "$filing_url")
-    
-    # Advanced stripping: Removes HTML tags and simplifies whitespace
-    local clean_text=$(echo "$raw_html" | sed 's/<[^>]*>/ /g' | tr -s ' ' | tr -d '\r')
-    
-    # Extract using more flexible Case-Insensitive regex
-    ITEM1_TEXT=$(echo "$clean_text" | grep -iP "Item 1\.(Business|Overview).*?Item 1A\." -o | head -c 35000 || echo "N/A")
-    ITEM1A_TEXT=$(echo "$clean_text" | grep -iP "Item 1A\.(Risk Factors).*?Item (1B|2)\." -o | head -c 35000 || echo "N/A")
-
-    # Final cleanup of extraction artifacts
-    ITEM1_TEXT=$(echo "$ITEM1_TEXT" | sed 's/Item 1A\..*//I')
-    ITEM1A_TEXT=$(echo "$ITEM1A_TEXT" | sed 's/Item \(1B\|2\)\..*//I')
-
-    echo "  ✅ Narrative text enriched (Length: $((${#ITEM1_TEXT} + ${#ITEM1A_TEXT})) chars)."
-}
-
-# ============================================
-# Helper: Data Extraction
+# Helper: SEC Value Extraction
 # ============================================
 extract_sec_value() {
     local file="$1"; local unit="${2:-USD}"; shift 2
@@ -157,53 +35,114 @@ extract_sec_value() {
     echo "N/A"
 }
 
-extract_av_value() {
-    local file="$1"; local field="$2"
-    local val=$(jq -r ".${field} // empty" "$file" 2>/dev/null)
-    [ -n "$val" ] && [ "$val" != "None" ] && echo "$val" || echo "N/A"
-}
+# ============================================
+# Step 1: Attempt Alpha Vantage
+# ============================================
+USE_YAHOO=false
+if [ -n "$AV_KEY" ]; then
+    echo "📊 Attempting Alpha Vantage for $TICKER_UPPER..."
+    curl -s "https://www.alphavantage.co/query?function=OVERVIEW&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_RAW"
+    
+    if grep -q "standard API rate limit\|Thank you for using Alpha Vantage" "$AV_RAW"; then
+        echo "⚠️ AV Rate Limit detected. Falling back to Yahoo Finance..."
+        USE_YAHOO=true
+    elif ! jq -e '.Symbol' "$AV_RAW" > /dev/null 2>&1; then
+        echo "⚠️ AV response invalid. Falling back to Yahoo Finance..."
+        USE_YAHOO=true
+    fi
+else
+    USE_YAHOO=true
+fi
 
 # ============================================
-# Main Execution Sequence
+# Step 2: Yahoo Fallback Logic & Extraction
 # ============================================
-AV_SUCCESS=false
-fetch_alpha_vantage && AV_SUCCESS=true || echo "  ⚠️ Alpha Vantage failed, skipping market data."
+if [ "$USE_YAHOO" = true ]; then
+    echo "🔍 Acquiring Yahoo Finance Session..."
+    curl -s -c "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://fc.yahoo.com" > /dev/null || true
+    CRUMB=$(curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://query1.finance.yahoo.com/v1/test/getcrumb" || echo "")
 
-fetch_sec_cik || { echo "❌ Could not find SEC CIK"; exit 1; }
-fetch_sec_facts || echo "⚠️ Failed to fetch numeric facts."
-fetch_sec_text || echo "⚠️ Failed to fetch narrative text."
+    echo "🔍 Fetching Yahoo Finance data..."
+    curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://query2.finance.yahoo.com/v7/finance/quote?symbols=${TICKER_UPPER}&crumb=${CRUMB}" > "${Y_RAW}_quote"
+    
+    # 🚨 THE FIX: Added 'financialData' to the modules request
+    curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER_UPPER}?modules=earningsHistory,assetProfile,defaultKeyStatistics,financialData&crumb=${CRUMB}" > "${Y_RAW}_summary"
+    
+    DESC=$(jq -r '.quoteSummary.result[0].assetProfile.longBusinessSummary // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+    
+    # Extract ROE from financialData where it actually lives
+    ROE=$(jq -r '.quoteSummary.result[0].financialData.returnOnEquity.fmt // .quoteSummary.result[0].financialData.returnOnEquity.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+    
+    # Robust PEG extraction (handles empty objects)
+    PEG=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.pegRatio | if type == "object" then (.fmt // .raw // "N/A") else (. // "N/A") end' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+    
+    PRICE=$(jq -r '.quoteResponse.result[0].regularMarketPrice // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
+    MCAP=$(jq -r '.quoteResponse.result[0].marketCap // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
+    SURPRISE=$(jq -c '.quoteSummary.result[0].earningsHistory.history | .[-4:] | map({date: .quarter.fmt, surprise: .surprisePercent.fmt})' "${Y_RAW}_summary" 2>/dev/null || echo "[]")
+    CIK=$(jq -r '.quoteResponse.result[0].extra?.cik // empty' "${Y_RAW}_quote" 2>/dev/null || echo "")
+else
+    DESC=$(jq -r '.Description // "N/A"' "$AV_RAW" 2>/dev/null || echo "N/A")
+    ROE=$(jq -r '.ReturnOnEquityTTM // "N/A"' "$AV_RAW" 2>/dev/null || echo "N/A")
+    PEG=$(jq -r '.PEGRatio // "N/A"' "$AV_RAW" 2>/dev/null || echo "N/A")
+    MCAP=$(jq -r '.MarketCapitalization // "N/A"' "$AV_RAW" 2>/dev/null || echo "N/A")
+    CIK=$(jq -r '.CIK // empty' "$AV_RAW" 2>/dev/null || echo "")
+    [ "$CIK" = "None" ] && CIK=""
+    PRICE=$(curl -s -H "User-Agent: $YAHOO_AGENT" "https://query1.finance.yahoo.com/v7/finance/quote?symbols=${TICKER_UPPER}" | jq -r '.quoteResponse.result[0].regularMarketPrice // "N/A"' || echo "N/A")
+    SURPRISE="[]"
+fi
 
-# Extract Metrics
-echo "  💾 Compiling Final Dataset..."
-COMPANY_NAME=$(jq -r '.entityName // "N/A"' "$SEC_FILE" 2>/dev/null || echo "N/A")
-REVENUE=$(extract_sec_value "$SEC_FILE" "USD" "Revenues" "SalesRevenueNet")
-NET_INCOME=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
-CURRENT_PRICE=$(jq -r '.["Global Quote"]["05. price"] // "N/A"' "$QUOTE_FILE" 2>/dev/null)
-MARKET_CAP=$(extract_av_value "$AV_FILE" "MarketCapitalization")
-PE_RATIO=$(extract_av_value "$AV_FILE" "PERatio")
+# ============================================
+# Step 3: SEC Data (Final Precision)
+# ============================================
+if [ -z "$CIK" ] || [ "$CIK" = "null" ]; then
+    echo "🔍 Looking up SEC CIK directly..."
+    # Use SEC Agent here
+    CIK=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${TICKER_UPPER}&output=atom" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
+fi
 
-# Build Enriched JSON
+REV="N/A"
+NI="N/A"
+if [ -n "$CIK" ]; then
+    # Fix: Remove leading zeros and use base-10 to prevent octal conversion errors in printf
+    CIK_CLEAN=$(echo "$CIK" | sed 's/^0*//')
+    CIK_PADDED=$(printf "%010d" "$CIK_CLEAN")
+    echo "🔍 Fetching SEC financial facts for CIK: $CIK_PADDED"
+    # 🚨 THE FIX: Use SEC_AGENT so EDGAR doesn't block the request with a 403 error
+    if curl -s -H "User-Agent: $SEC_AGENT" "https://data.sec.gov/api/xbrl/companyfacts/CIK${CIK_PADDED}.json" -o "$SEC_FILE"; then
+        if [ -s "$SEC_FILE" ] && jq -e '.facts' "$SEC_FILE" > /dev/null 2>&1; then
+            REV=$(extract_sec_value "$SEC_FILE" "USD" "Revenues" "SalesRevenueNet" "RevenueFromContractWithCustomerExcludingAssessedTax")
+            NI=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
+        fi
+    fi
+fi
+
+# ============================================
+# Step 4: Final JSON Compilation
+# ============================================
+echo "💾 Compiling Unified Dataset..."
 jq -n \
     --arg ticker "$TICKER_UPPER" \
-    --arg cik "$CIK" \
-    --arg name "$COMPANY_NAME" \
-    --arg rev "$REVENUE" \
-    --arg ni "$NET_INCOME" \
-    --arg price "$CURRENT_PRICE" \
-    --arg cap "$MARKET_CAP" \
-    --arg pe "$PE_RATIO" \
-    --arg item1 "${ITEM1_TEXT:-N/A}" \
-    --arg item1a "${ITEM1A_TEXT:-N/A}" \
+    --arg desc "$DESC" \
+    --arg rev "$REV" \
+    --arg ni "$NI" \
+    --arg price "$PRICE" \
+    --arg cap "$MCAP" \
+    --arg roe "$ROE" \
+    --arg peg "$PEG" \
+    --argjson surprise "$SURPRISE" \
     '{
         ticker: $ticker,
-        cik: $cik,
-        timestamp: ("" + (now | strftime("%Y-%m-%dT%H:%M:%SZ"))),
-        company_profile: { name: $name },
-        financial_metrics: { revenue: $rev, net_income: $ni },
-        valuation: { current_price: $price, market_cap: $cap, pe_ratio: $pe },
-        sec_data: { item1: $item1, item1a: $item1a }
+        timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
+        company_profile: { name: $ticker, description: $desc },
+        financial_metrics: { revenue: $rev, net_income: $ni, roe: $roe },
+        valuation: { current_price: $price, market_cap: $cap, peg_ratio: $peg },
+        momentum: { earnings_surprises: $surprise },
+        sec_data: { 
+            item1: ("Business: " + $desc + "\nEarnings Momentum: " + ($surprise | tostring)), 
+            item1a: "Analyze risks based on valuation and historical volatility."
+        }
     }' > "$DATA_FILE"
 
-# Final Cleanup of raw quote file
-rm -f "$QUOTE_FILE"
-echo "✅ Enriched data saved: $DATA_FILE"
+# Cleanup
+rm -f "$AV_RAW" "$SEC_FILE" "${Y_RAW}_quote" "${Y_RAW}_summary" "$COOKIE_FILE"
+echo "✅ Data ready: $DATA_FILE"

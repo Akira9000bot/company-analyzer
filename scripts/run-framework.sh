@@ -1,5 +1,6 @@
 #!/bin/bash
-# run-framework.sh - Final Merge: Budget Safety + Data Efficiency
+# run-framework.sh - Momentum-Aware Context Hand-off
+# Updated to support enriched JSON and sequential inference.
 
 set -euo pipefail
 
@@ -16,27 +17,38 @@ TICKER="${1:-}"
 FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$SKILL_DIR/assets/outputs}"
-LIMIT_ARG="${5:-}" # Passed from analyze-parallel.sh
+LIMIT_ARG="${5:-}"
 
-# Fallback internal map if $5 is empty
+# Inherit context from analyze-pipeline.sh
+PREVIOUS_CONTEXT="${SUMMARY_CONTEXT:-None}"
+
+# Max Token Guardrails
 declare -A MAX_TOKENS=(
-    ["01-phase"]=600 ["02-metrics"]=800 ["03-ai-moat"]=800 
+    ["01-phase"]=600 ["02-metrics"]=800 ["03-ai-moat"]=1200 
     ["04-strategic-moat"]=900 ["05-sentiment"]=700 ["06-growth"]=800 
-    ["07-business"]=800 ["08-risk"]=700
+    ["07-business"]=800 ["08-risk"]=1000
 )
 FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
 
-# 3. Data Segmenting (THE BIG COST SAVER)
+# 3. Data Segmenting (Surgical Injection)
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
 
 get_relevant_context() {
     if [ ! -f "$DATA_FILE" ]; then echo "{}"; return; fi
     case "$FW_ID" in
-        "07-business"|"03-ai-moat") jq -r '.sec_data.item1 // .full_text[:15000]' "$DATA_FILE" ;;
-        "08-risk") jq -r '.sec_data.item1a // .full_text[:15000]' "$DATA_FILE" ;;
-        "01-phase"|"02-metrics") jq -c '.financial_metrics' "$DATA_FILE" ;;
-        *) jq -r '.full_text[:10000]' "$DATA_FILE" ;;
+        "03-ai-moat") 
+            # Inject ROE, PEG, and Earnings Surprises for Moat inference
+            jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description}' "$DATA_FILE" ;;
+        "08-risk") 
+            # Inject valuation and momentum for Risk analysis
+            jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile}' "$DATA_FILE" ;;
+        "01-phase"|"02-metrics") 
+            # Core financial metrics
+            jq -c '{metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
+        *) 
+            # Default to description and basic profile
+            jq -c '{profile: .company_profile, valuation: .valuation}' "$DATA_FILE" ;;
     esac
 }
 
@@ -45,32 +57,42 @@ init_trace
 mkdir -p "$OUTPUT_DIR"
 CONTEXT=$(get_relevant_context)
 PROMPT_CONTENT=$(cat "$PROMPT_FILE")
-FULL_PROMPT="Company: $TICKER_UPPER\n\nData: $CONTEXT\n\nInstructions: $PROMPT_CONTENT"
+
+# The Context Bridge: Combine the raw data + previous framework results
+FULL_PROMPT="Company: $TICKER_UPPER
+Analysis Context from Previous Steps: $PREVIOUS_CONTEXT
+
+Raw Data:
+$CONTEXT
+
+Task Instructions:
+$PROMPT_CONTENT"
+
 CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 
+# 5. Cache & Budget Enforcement
 CACHED_RESPONSE=$(cache_get "$CACHE_KEY")
 if [ -n "$CACHED_RESPONSE" ]; then
     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-    log_trace "INFO" "$FW_ID" "Cache HIT | Age: $(cache_age "$CACHE_KEY")d"
+    log_trace "INFO" "$FW_ID" "Cache HIT"
     exit 0
 fi
 
-# 5. API Execution with Budget Guard
 if ! check_budget "$FW_ID"; then
     log_trace "ERROR" "$FW_ID" "Budget check failed"
     exit 1
 fi
 
+# 6. API Execution (Gemini 3 Flash)
 API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< $(extract_usage "$API_RESPONSE")
 
-# 6. Save & Log
+# 7. Final Save & Metadata
 echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
 log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
-# Save to cache with metadata (your production requirement)
 METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
 cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
 

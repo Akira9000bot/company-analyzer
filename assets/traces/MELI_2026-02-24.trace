@@ -1,12 +1,2 @@
-[02:21:01] INFO   | FETCH        | Attempting Alpha Vantage fetch
-[02:21:01] INFO   | FETCH        | Alpha Vantage quote | Latency: .158177060s
-[02:21:13] INFO   | FETCH        | Looking up SEC CIK
-[02:21:14] INFO   | FETCH        | SEC CIK lookup | Latency: .268806764s
-[02:21:27] INFO   | FETCH        | Attempting Alpha Vantage fetch
-[02:21:28] INFO   | FETCH        | Alpha Vantage quote | Latency: .084037267s
-[02:21:40] INFO   | FETCH        | Looking up SEC CIK
-[02:21:40] INFO   | FETCH        | SEC CIK lookup | Latency: .189386884s
-[02:21:46] INFO   | FETCH        | Attempting Alpha Vantage fetch
-[02:21:46] INFO   | FETCH        | Alpha Vantage quote | Latency: .076583470s
-[02:21:58] INFO   | FETCH        | Looking up SEC CIK
-[02:21:58] INFO   | FETCH        | SEC CIK lookup | Latency: .222972671s
+[03:25:33] INFO   | FETCH        | Attempting Alpha Vantage fetch
+[03:27:37] INFO   | FETCH        | Attempting Alpha Vantage fetch
