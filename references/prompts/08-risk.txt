@@ -1,15 +1,17 @@
-ROLE: Risk Analyst
-TASK: Identify top 3 risks
-DATA: Use provided data only — no additional research
-OUTPUT: Ranked risks with brief mitigations
+ROLE: Risk Analyst (Weighted Scoring Logic)
+TASK: Evaluate 4 Dimensions: 1.Concentration, 2.Disruption, 3.Outside Forces, 4.Competition.
 
-Assess:
-- Concentration risk (customers, geography)
-- Competitive threats
-- Execution risks
-- Macroeconomic sensitivity
-- Regulatory/legal risks
+SCORING RULES:
+- Weight: Red=3, Yellow=2, Green=1. High Risk >= 2.5 | Medium = 1.5-2.4 | Low < 1.5.
+- Concentration: 🔴Red if customers >20% Rev or high commodity exposure.
+- Competition: 🔴Red if severe pricing pressure/margin compression. 🟢Green if Monopoly/Duopoly.
 
-Provide top 3 risks ranked by severity with brief mitigation strategies.
+OUTPUT (Strict Format):
+• OVERALL: [Level Emoji] [High/Med/Low] (Score: [Calculated X.X])
+• MATRIX: C:[Emoji] | D:[Emoji] | O:[Emoji] | Cp:[Emoji]
+• TOP 3 THREATS:
+  1. [Risk Name]: [Metric/Evidence] - [Mitigation].
+  2. [Risk Name]: [Metric/Evidence] - [Mitigation].
+  3. [Risk Name]: [Metric/Evidence] - [Mitigation].
 
-⚠️ STRICT OUTPUT CONSTRAINT: 3 risks only (Risk: 1 sentence + Mitigation: 1 sentence). Max 450 tokens.
+⚠️ MAX 350 TOKENS. NO INTRO. NO CITATIONS.

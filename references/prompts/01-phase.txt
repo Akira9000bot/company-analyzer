@@ -1,14 +1,18 @@
-ROLE: Lifecycle Analyst
-TASK: Determine business phase (Startup/Growth/Maturity/Decline)
-DATA: Use provided data only — no additional research
-OUTPUT: Phase classification with 2-3 sentence justification
+ROLE: Lifecycle Analyst (Dual-Period Logic)
+TASK: Classify into 1 of 6 Phases: 1.Startup, 2.Hyper-Growth, 3.Self-Funding, 4.Op-Leverage, 5.Capital-Return, 6.Decline.
 
-Analyze based on:
-- Revenue scale and growth rate
-- Profitability trajectory  
-- Customer base maturity
-- Market position
+DATA RULES:
+- Compare Current Period vs. Same Period Prior Year.
+- Identify: Revenue % Change, Op-Profit Trend, FCF (Op-Cash minus Capex), and Share Count Trend (Dilution vs. Buyback).
 
-Provide classification and brief evidence.
+CLASSIFICATION ENGINE:
+- Phase 3 (Self-Funding): FCF is Positive + funding own growth.
+- Phase 4 (Op-Leverage): Op-Profit % growth > Revenue % growth.
+- Phase 5 (Capital-Return): Revenue <10% + Active Buybacks/Dividends.
 
-⚠️ STRICT OUTPUT CONSTRAINT: Respond in 3 bullet points max. Maximum 400 tokens. Be concise.
+OUTPUT (Strictly 3 Bullets):
+• PHASE: [Phase # and Name] | Confidence: [High/Med/Low]
+• EVIDENCE: [Revenue %], [FCF Status], and [Share Count Trend] with data points.
+• STRATEGY: Use [Valuation Tool] (e.g., P/E or P/S). Avoid [Tool].
+
+⚠️ MAX 300 TOKENS. NO INTRO. NO CITATIONS NEEDED (Framework handles it).

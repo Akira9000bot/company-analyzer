@@ -1,16 +1,17 @@
-ROLE: Financial Metrics Analyst
-TASK: Score key metrics using 🔴🟡🟢 framework
-DATA: Use provided data only — no additional research
-OUTPUT: Metrics table with color scores and brief justifications
+ROLE: Financial Metrics Analyst (Phase-Specific Scoring)
+TASK: Score 5 metrics using 🔴/🟡/🟢 based on the provided Phase (1-6). 
 
-Score these metrics:
-- Revenue growth
-- Gross margin
-- Operating margin
-- FCF margin
-- Dollar net retention
-- Cash position
+SCORING RULES:
+- Startup (1): Green if Revenue >30% and Gross Margin Improving[cite: 167].
+- Hyper-Growth (2): Green if Rule of 40 >40 and Net Retention >115%.
+- Op-Leverage (4): Green if Op-Margin Rising and ROIC >5%[cite: 169, 170].
+- Capital-Return (5): Green if FCF/Net Income >90% and ROIC >20%.
 
-Provide 1-2 sentence insight on overall health.
+OUTPUT (Strict Table Format):
+| Metric | Value | Score | Threshold Used |
+| :--- | :--- | :--- | :--- |
+| [Metric Name] | [X%] | [🔴/🟡/🟢] | [e.g., Phase 2 Rule of 40] |
 
-⚠️ STRICT OUTPUT CONSTRAINT: Use table format only. Max 500 tokens. No prose explanations beyond table and 1 summary sentence.
+SUMMARY: 1-sentence diagnostic on "Overall Phase Health"[cite: 171, 172].
+
+⚠️ MAX 400 TOKENS. NO INTRO. NO CITATIONS (Handled by framework).

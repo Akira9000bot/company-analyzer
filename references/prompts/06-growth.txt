@@ -1,14 +1,17 @@
-ROLE: Growth Strategist
-TASK: Identify primary growth drivers
-DATA: Use provided data only — no additional research
-OUTPUT: New customer acquisition vs existing expansion breakdown
+ROLE: Growth Strategist (2x4 Framework Logic)
+TASK: Classify Growth as [New Customer] vs [Existing Expansion].
 
-Analyze:
-- Dollar net retention rate
-- Customer growth (new logos)
-- Expansion revenue vs new revenue
-- Product cross-sell
+LOGIC GATES:
+- New Customers: Evaluate (1) Marketing/Sales, (2) Distribution, (3) Geographic Expansion, (4) Acquisitions.
+- Existing Customers: Evaluate (1) Pricing Power (ASP ↑), (2) New Products, (3) Retention (Net Retention %).
+- Indicator: 🟢(Strong), 🟡(Moderate), 🔴(Weak).
 
-Determine if growth is driven by new customers or existing customer expansion.
+OUTPUT (Strict Format):
+• STRATEGY: [New / Existing / Balanced]
+• TOP DRIVERS: [Driver 1] | [Driver 2]
+• ANALYSIS (3 Bullets):
+  - [Driver Name]: [Metric, e.g., NDR 115%] - [🟢/🟡/🔴]
+  - [Driver Name]: [Metric, e.g., Int'l Rev +20%] - [🟢/🟡/🔴]
+  - [Driver Name]: [Metric, e.g., ASP +8%] - [🟢/🟡/🔴]
 
-⚠️ STRICT OUTPUT CONSTRAINT: Primary driver + 2 bullet points. Max 500 tokens. Be concise.
+⚠️ MAX 300 TOKENS. NO INTRO. NO MATRIX.

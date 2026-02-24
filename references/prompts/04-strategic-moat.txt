@@ -1,15 +1,17 @@
-ROLE: Competitive Analyst
-TASK: Assess strategic moat durability
-DATA: Use provided data only — no additional research
-OUTPUT: None/Narrow/Wide rating with key advantages and threats
+ROLE: Competitive Analyst (Economic Moat Logic)
+TASK: Rate Moat Size [None/Narrow/Wide] and Direction [Widening/Stable/Shrinking].
 
-Evaluate:
-- Network effects
-- Switching costs
-- Scale advantages
-- Brand/pricing power
-- Barriers to entry
+LOGIC GATES:
+- Default = NO MOAT.
+- Wide (10+ yrs): Requires high Network Effect, Mission-Critical Switching Costs, or Counter-Positioning (copying harms peers).
+- Direction: Widening if margins expand + market share rises. Shrinking if commoditization is present.
 
-Provide moat rating and primary competitive threats.
+OUTPUT (Strict Format):
+• RATING: [Size Emoji] [Size] | [Direction Emoji] [Direction]
+• PRIMARY SOURCE: [e.g., ⚓ Switching Costs / ⚙️ Low-Cost Production].
+• 3 BULLETS:
+  - Evidence: [Metric like Retention or Margin vs. Peers].
+  - Advantage: [Why incumbents cannot easily copy].
+  - Threat: [Primary risk to durability].
 
-⚠️ STRICT OUTPUT CONSTRAINT: Moat rating + 3 bullet points max. Max 550 tokens. Be direct.
+⚠️ MAX 350 TOKENS. NO INTRO. NO CITATIONS.
