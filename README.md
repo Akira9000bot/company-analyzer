@@ -101,13 +101,10 @@ Generate a summary of all research costs and token usage:
 
 ## 🛠️ Configuration
 
-* 
-**API Configuration**: Managed via `~/.openclaw/agents/main/agent/auth-profiles.json`. 
+* **API Configuration**: Managed via `~/.openclaw/agents/main/agent/auth-profiles.json`. 
 
 
-* 
-**Pricing Data**: Update `scripts/lib/prices.json` to adjust for model pricing changes. 
+* **Pricing Data**: Update `scripts/lib/prices.json` to adjust for model pricing changes. 
 
 
-* 
-**Global Settings**: Rate limits and default models are pulled dynamically from `~/.openclaw/openclaw.json`.
+* **Global Settings**: Rate limits and default models are pulled dynamically from `~/.openclaw/openclaw.json`.
