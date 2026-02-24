@@ -15,7 +15,7 @@ When the heartbeat fires, perform a fast, lightweight review:
 
 Do not over-analyze. Complete this entire checklist in a single, concise response using minimal tokens. 
 
-**Model:** `google/gemini-2.0-flash-lite`
+**Model:** `google/gemini-3-flash-preview`
 
 ---
 
