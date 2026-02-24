@@ -81,30 +81,25 @@ for fw_id in "${FW_SEQUENCE[@]}"; do
 done
 
 # ============================================
-# Phase 2: High-Density Synthesis
+# Phase 2: Local Report Concatenation (Cost: $0.00)
 # ============================================
-echo "🧪 Generating Final Verdict..."
-SYNTH_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_synthesis.md"
-COMBINED_CONTEXT=""
-for fw_id in "${FW_SEQUENCE[@]}"; do
-    FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
-    [ -f "$FW_FILE" ] && COMBINED_CONTEXT="${COMBINED_CONTEXT}\n\n### $fw_id\n$(head -n 20 "$FW_FILE")"
-done
+echo "🧪 Compiling Final Research Dossier..."
+SYNTH_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_FINAL_REPORT.md"
 
-SYNTH_PROMPT="Act as Chief Investment Officer. Synthesize these 8 reports for $TICKER_UPPER into a Buy/Hold/Sell verdict. Focus on the tension between the AI Moat and the Execution Risks.
-Reports: $COMBINED_CONTEXT"
+{
+    echo "# Strategic Audit: $TICKER_UPPER"
+    echo "Generated: $(date)"
+    echo "---"
+    for fw_id in "${FW_SEQUENCE[@]}"; do
+        FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+        if [ -f "$FW_FILE" ]; then
+            # Format the header based on the ID (e.g., "03-ai-moat" -> "AI MOAT")
+            HEADER=$(echo "$fw_id" | cut -d'-' -f2- | tr '[:lower:]' '[:upper:]')
+            echo "## $HEADER"
+            cat "$FW_FILE"
+            echo -e "\n---\n"
+        fi
+    done
+} > "$SYNTH_FILE"
 
-API_RESPONSE=$(call_llm_api "$SYNTH_PROMPT" "1200")
-extract_content "$API_RESPONSE" > "$SYNTH_FILE"
-
-# ============================================
-# Performance & Delivery
-# ============================================
-END_TIME=$(date +%s)
-TOTAL_TIME=$((END_TIME - START_TIME))
-
-echo "---------------------------------------------------------"
-echo "✅ Pipeline Complete for $TICKER_UPPER in ${TOTAL_TIME}s"
-cost_summary
-
-# Add Telegram logic here if desired (using the SYNTH_FILE)
+echo "✅ Dossier saved to $SYNTH_FILE"
