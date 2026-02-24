@@ -14,6 +14,22 @@ init_cost_tracker() {
     touch "$COST_LOG"
 }
 
+# NEW: Unified Budget Check Function
+# Returns 0 if under budget, 1 if over budget.
+check_budget() {
+    [ ! -f "$COST_LOG" ] && return 0
+    
+    local today=$(date -u +%Y-%m-%d)
+    local spent=$(grep "^${today}T" "$COST_LOG" 2>/dev/null | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
+    [ -z "$spent" ] && spent="0"
+    
+    if (( $(echo "$spent >= $DAILY_BUDGET" | bc -l) )); then
+        echo "⚠️ BUDGET EXCEEDED: \$$spent / \$$DAILY_BUDGET" >&2
+        return 1
+    fi
+    return 0
+}
+
 # Log API call cost with Dynamic Price Lookup
 # Usage: log_cost <ticker> <framework> <input_tokens> <output_tokens>
 log_cost() {
@@ -24,12 +40,19 @@ log_cost() {
     
     init_cost_tracker
 
-    # 1. Determine active model from OpenClaw config
-    local active_model=$(jq -r '.agents.defaults.model.primary // "google/gemini-3-flash-preview"' "$CONFIG_FILE")
+    # 1. Determine active model with safe fallback
+    local active_model="google/gemini-3-flash-preview"
+    if [ -f "$CONFIG_FILE" ]; then
+        active_model=$(jq -r '.agents.defaults.model.primary // "google/gemini-3-flash-preview"' "$CONFIG_FILE" 2>/dev/null || echo "google/gemini-3-flash-preview")
+    fi
     
-    # 2. Lookup prices for that specific model
-    local in_rate=$(jq -r ".\"$active_model\".input // 0.10" "$PRICES_FILE")
-    local out_rate=$(jq -r ".\"$active_model\".output // 0.40" "$PRICES_FILE")
+    # 2. Lookup prices for that specific model with safe fallbacks
+    local in_rate="0.10"
+    local out_rate="0.40"
+    if [ -f "$PRICES_FILE" ]; then
+        in_rate=$(jq -r ".\"$active_model\".input // 0.10" "$PRICES_FILE" 2>/dev/null || echo "0.10")
+        out_rate=$(jq -r ".\"$active_model\".output // 0.40" "$PRICES_FILE" 2>/dev/null || echo "0.40")
+    fi
 
     # 3. Calculate (Scale 6 for high precision on pennies)
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -55,5 +78,5 @@ cost_summary() {
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export -f init_cost_tracker log_cost cost_summary
+    export -f init_cost_tracker log_cost cost_summary check_budget
 fi

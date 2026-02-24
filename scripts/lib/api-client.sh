@@ -73,7 +73,7 @@ call_llm_api() {
             contents: [{parts: [{text: $text}]}],
             generationConfig: {
                 maxOutputTokens: $max_tokens,
-                temperature: 0.3
+                temperature: 0.5
             }
         }')
     

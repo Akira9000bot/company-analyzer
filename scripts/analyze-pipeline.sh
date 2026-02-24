@@ -30,9 +30,9 @@ TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 FW_SEQUENCE=("01-phase" "02-metrics" "07-business" "03-ai-moat" "04-strategic-moat" "06-growth" "05-sentiment" "08-risk")
 
 declare -A LIMITS=(
-    ["01-phase"]="600" ["02-metrics"]="800" ["03-ai-moat"]="1200"
-    ["04-strategic-moat"]="900" ["05-sentiment"]="700" ["06-growth"]="800"
-    ["07-business"]="800" ["08-risk"]="1000"
+    ["01-phase"]="1000" ["02-metrics"]="1200" ["03-ai-moat"]="1200"
+    ["04-strategic-moat"]="1200" ["05-sentiment"]="1000" ["06-growth"]="1200"
+    ["07-business"]="1200" ["08-risk"]="1200"
 )
 
 # 4. Initialize
@@ -73,8 +73,7 @@ for fw_id in "${FW_SEQUENCE[@]}"; do
     # We grab the first 5 lines (usually the score/verdict) for the next model's prompt
     FW_OUT="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
     SUMMARY_LINE=$(head -n 5 "$FW_OUT" | tr '\n' ' ' | sed 's/[#*]//g')
-    SUMMARY_CONTEXT="${SUMMARY_CONTEXT}\n- Previous Step ($fw_id): $SUMMARY_LINE"
-    
+    SUMMARY_CONTEXT="- Previous Step ($fw_id): $SUMMARY_LINE"    
     echo "  ✅ Done. Cooling down TPM window..."
     
     # MANDATORY: 15s Sleep to prevent TPM spikes with enriched momentum data

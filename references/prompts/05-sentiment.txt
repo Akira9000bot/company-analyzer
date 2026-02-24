@@ -6,11 +6,11 @@ LOGIC GATES:
 - Balance: Provide at least 2 Bullish and 2 Bearish specific catalysts/arguments.
 - Catalyst: Identify the next specific date/event (Earnings, FDA, Launch).
 
-OUTPUT (Strict Format):
+OUTPUT:
 • VALUATION: [Rating] | SENTIMENT: A:[Emoji] I:[Emoji] M:[Emoji]
 • NEXT CATALYST: [Event Name] on [Date/Estimated Date].
 • BULL CASE: [Arg 1] | [Arg 2]
 • BEAR CASE: [Arg 1] | [Arg 2]
 • RATIONALE: 1-sentence link between price cause and effect.
 
-⚠️ MAX 300 TOKENS. NO INTRO. NO CITATIONS.
+⚠️ NO INTRO. NO CITATIONS.

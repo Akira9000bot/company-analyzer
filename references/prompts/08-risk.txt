@@ -7,9 +7,9 @@ LOGIC GATES:
 3. Physical: If the description lacks physical "Atoms" (purely digital/bits), then FRAGILE to AI simulation.
 4. Network: If the business relies on Internet-scale data (non-proprietary), then FRAGILE.
 
-OUTPUT (Strict Format):
-• LENSES: L1:[Emoji][Rating] | L2:[Emoji][Rating] | L3:[Emoji][Rating] | L4:[Emoji][Rating]
-• VERDICT: [Fragile/Robust/Antifragile] - [1-sentence structural justification of the primary risk].
-• FAILURE POINT: The "[Primary Threat]" - [Explain why the combination of PEG/ROE/Description creates a terminal risk].
+OUTPUT:
+• LENSES: L1: Emoji - Rating - L2: Emoji - Rating - L3:Emoji - Rating - L4:Emoji - Rating
+• VERDICT: Fragile/Robust/Antifragile - 1-sentence structural justification
+• FAILURE POINT: The "Primary Threat" - Explain why the combination of PEG/ROE/Description creates a terminal risk.
 
-⚠️ MAX 350 TOKENS. NO INTRO. NO CITATIONS.
+⚠️ BE CONSICE. NO INTRO. NO CITATIONS.

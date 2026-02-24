@@ -10,9 +10,9 @@ CLASSIFICATION ENGINE:
 - Phase 4 (Op-Leverage): Op-Profit % growth > Revenue % growth.
 - Phase 5 (Capital-Return): Revenue <10% + Active Buybacks/Dividends.
 
-OUTPUT (Strictly 3 Bullets):
-• PHASE: [Phase # and Name] | Confidence: [High/Med/Low]
-• EVIDENCE: [Revenue %], [FCF Status], and [Share Count Trend] with data points.
-• STRATEGY: Use [Valuation Tool] (e.g., P/E or P/S). Avoid [Tool].
+OUTPUT:
+• PHASE: Phase # and Name - Confidence: High/Med/Low
+• EVIDENCE: Revenue %, FCF Status, and Share Count Trend with data points.
+• STRATEGY: Use Valuation Tool (e.g., P/E or P/S). Avoid [Tool].
 
-⚠️ MAX 300 TOKENS. NO INTRO. NO CITATIONS NEEDED (Framework handles it).
+⚠️ NO INTRO. NO CITATIONS NEEDED (Framework handles it).

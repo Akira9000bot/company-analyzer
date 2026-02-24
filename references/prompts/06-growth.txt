@@ -6,12 +6,12 @@ LOGIC GATES:
 - Existing Customers: Evaluate (1) Pricing Power (ASP ↑), (2) New Products, (3) Retention (Net Retention %).
 - Indicator: 🟢(Strong), 🟡(Moderate), 🔴(Weak).
 
-OUTPUT (Strict Format):
+OUTPUT:
 • STRATEGY: [New / Existing / Balanced]
-• TOP DRIVERS: [Driver 1] | [Driver 2]
+• TOP DRIVERS: Driver 1 - Driver 2
 • ANALYSIS (3 Bullets):
-  - [Driver Name]: [Metric, e.g., NDR 115%] - [🟢/🟡/🔴]
-  - [Driver Name]: [Metric, e.g., Int'l Rev +20%] - [🟢/🟡/🔴]
-  - [Driver Name]: [Metric, e.g., ASP +8%] - [🟢/🟡/🔴]
+  - Driver Name: Metric, e.g., NDR 115% - 🟢/🟡/🔴
+  - Driver Name: Metric, e.g., Int'l Rev +20% - 🟢/🟡/🔴
+  - Driver Name: Metric, e.g., ASP +8% - 🟢/🟡/🔴
 
-⚠️ MAX 300 TOKENS. NO INTRO. NO MATRIX.
+⚠️ NO INTRO. NO MATRIX.

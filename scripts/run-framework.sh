@@ -24,10 +24,11 @@ PREVIOUS_CONTEXT="${SUMMARY_CONTEXT:-None}"
 
 # Max Token Guardrails
 declare -A MAX_TOKENS=(
-    ["01-phase"]=600 ["02-metrics"]=800 ["03-ai-moat"]=1200 
-    ["04-strategic-moat"]=900 ["05-sentiment"]=700 ["06-growth"]=800 
-    ["07-business"]=800 ["08-risk"]=1000
+    ["01-phase"]=1000 ["02-metrics"]=1200 ["03-ai-moat"]=1200 
+    ["04-strategic-moat"]=1200 ["05-sentiment"]=1000 ["06-growth"]=1200 
+    ["07-business"]=1200 ["08-risk"]=1200
 )
+
 FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
 
 # 3. Data Segmenting (Surgical Injection)
@@ -37,6 +38,9 @@ DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
 get_relevant_context() {
     if [ ! -f "$DATA_FILE" ]; then echo "{}"; return; fi
     case "$FW_ID" in
+        "07-business")
+            # Inject profile and financial metrics for business evaluation
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
         "03-ai-moat") 
             # Inject ROE, PEG, and Earnings Surprises for Moat inference
             jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description}' "$DATA_FILE" ;;
@@ -71,12 +75,12 @@ $PROMPT_CONTENT"
 CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 
 # 5. Cache & Budget Enforcement
-CACHED_RESPONSE=$(cache_get "$CACHE_KEY")
-if [ -n "$CACHED_RESPONSE" ]; then
-    echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-    log_trace "INFO" "$FW_ID" "Cache HIT"
-    exit 0
-fi
+# CACHED_RESPONSE=$(cache_get "$CACHE_KEY" || echo "")
+# if [ -n "$CACHED_RESPONSE" ]; then
+#     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
+#     log_trace "INFO" "$FW_ID" "Cache HIT"
+#     exit 0
+# fi
 
 if ! check_budget "$FW_ID"; then
     log_trace "ERROR" "$FW_ID" "Budget check failed"

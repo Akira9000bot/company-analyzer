@@ -7,9 +7,9 @@ LOGIC GATES:
 3. Physical: If AI cannot simulate the delivery (Logistics/Warehousing in description), then ANTIFRAGILE.
 4. Network: If ROE > 20% and persistent Earnings Surprises indicate Private/Vertical context, then ANTIFRAGILE.
 
-OUTPUT (Strict Format):
-• LENSES: L1:[Emoji][Rating] | L2:[Emoji][Rating] | L3:[Emoji][Rating] | L4:[Emoji][Rating]
-• VERDICT: [Fragile/Robust/Antifragile] - [1-sentence structural justification].
-• MOAT SIGNAL: [Metric Evidence] - [Explain why momentum/ROE confirms the moat].
+OUTPUT:
+• LENSES: L1: Emoji - Rating) | L2:(Emoji - Rating) | L3: (Emoji - Rating) | L4:( Emoji - Rating)
+• VERDICT: Fragile/Robust/Antifragile - 1-sentence structural justification.
+• MOAT SIGNAL: Metric Evidence - Explain why momentum/ROE confirms the moat.
 
-⚠️ MAX 350 TOKENS. NO INTRO. NO CITATIONS.
+⚠️ NO INTRO. NO CITATIONS.

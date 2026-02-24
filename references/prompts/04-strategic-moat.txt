@@ -6,7 +6,7 @@ LOGIC GATES:
 - Wide (10+ yrs): Requires high Network Effect, Mission-Critical Switching Costs, or Counter-Positioning (copying harms peers).
 - Direction: Widening if margins expand + market share rises. Shrinking if commoditization is present.
 
-OUTPUT (Strict Format):
+OUTPUT:
 • RATING: [Size Emoji] [Size] | [Direction Emoji] [Direction]
 • PRIMARY SOURCE: [e.g., ⚓ Switching Costs / ⚙️ Low-Cost Production].
 • 3 BULLETS:
@@ -14,4 +14,4 @@ OUTPUT (Strict Format):
   - Advantage: [Why incumbents cannot easily copy].
   - Threat: [Primary risk to durability].
 
-⚠️ MAX 350 TOKENS. NO INTRO. NO CITATIONS.
+⚠️ NO INTRO. NO CITATIONS.
