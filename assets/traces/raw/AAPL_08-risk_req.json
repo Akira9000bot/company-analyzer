@@ -1,9 +1,0 @@
-{
-  "model": "kimi-k2.5",
-  "messages": [
-    {
-      "role": "user",
-      "content": "Company: AAPL\n\nROLE: Risk Analyst\nTASK: Identify top 3 risks\nDATA: Use provided data only — no additional research\nOUTPUT: Ranked risks with brief mitigations\n\nAssess:\n- Concentration risk (customers, geography)\n- Competitive threats\n- Execution risks\n- Macroeconomic sensitivity\n- Regulatory/legal risks\n\nProvide top 3 risks ranked by severity with brief mitigation strategies."
-    }
-  ]
-}
