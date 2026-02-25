@@ -1,17 +1,19 @@
-# Heartbeat Review: 2026-02-24
+# Heartbeat Review: 2026-02-25
 
 ## 1. Mistake Review
-- **2026-02-23**: Encountered critical bug where Kimi k2.5 reasoning mode consumed all tokens, resulting in empty outputs but full charges (~$0.047 wasted).
-- **Resolution**: Switched to `gemini-3-flash-preview` for core engine. 40% cost reduction by removing synthesis phase.
-- **2026-02-24**: Optimized `company-analyzer` and implemented narrative extraction. Fixed CIK padding bug. Parallel execution active.
+- **Context Bloat:** `main` session hit TPM limits (~961k tokens) causing 503 errors.
+- **Protocol Fix:** Isolated heartbeats into a separate session, set 04:00 UTC daily reset for `main`, and reduced context TTL to 10m.
 
-## 2. Skill Check
-- `skills/company-analyzer`: Structure looks healthy. No broken files detected in surface scan.
+## 2. Distillation Sync
+- **2026-02-24:** `## Summary` block verified in `memory/2026-02-24.md`. All significant events (SEC narrative extraction, CIK octal bug fix, MELI/SNOW/NET analysis) captured.
 
-## 3. Workspace Maintenance
-- **Git**: Local branch `master` has diverged from `origin/main` (2 local, 23 remote). Tree is clean.
-- **Assets**: `assets/outputs` directory missing from root (expected, as it's localized within the skill).
-- **Orphans**: None detected.
+## 3. Skill Check
+- `skills/company-analyzer`: Active and verified. Sequential pipeline with local concatenation is performing as expected with Gemini 3 Flash.
 
-## 4. Memory Consolidation
-- `MEMORY.md` is currently missing from the workspace root. Initializing/updating this should be a priority once more permanent context is established.
+## 4. Workspace Maintenance
+- **Git:** Uncommitted changes (M `HEARTBEAT.md`, M `memory/2026-02-24.md`). `master` is 23 behind `origin/main`.
+- **Memory:** `MEMORY.md` initialized but needs regular sync from daily files.
+- **Maintenance:** Root `assets/outputs/` directory is missing (outputs are currently localized to skills).
+
+## 5. Memory Consolidation
+- Current `MEMORY.md` contains context protocols and investment interests. Verified.
