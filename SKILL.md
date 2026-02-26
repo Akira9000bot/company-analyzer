@@ -15,20 +15,18 @@ DO NOT spawn subagents. DO NOT use sessions_spawn. Direct script execution only.
 
 # Company Analyzer
 
-Perform comprehensive investment research on public companies using 8 specialized analysis frameworks with **parallel execution**, **response caching**, and **cost controls**.
-
-**Note:** Synthesis phase removed. Analysis returns 8 framework outputs without consolidated verdict.
+Perform comprehensive investment research on public companies using 8 specialized analysis frameworks with **response caching** and **cost controls**.
 
 ## Quick Commands
 
 When user types `/analyze <TICKER>`, execute:
 ```bash
-cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER> --live
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
 ```
 
 For dry run (no cost):
 ```bash
-cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER>
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
 ```
 
 ## Features

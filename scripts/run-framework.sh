@@ -47,13 +47,16 @@ get_relevant_context() {
         "08-risk") 
             # Inject valuation and momentum for Risk analysis
             jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile}' "$DATA_FILE" ;;
-        "01-phase"|"02-metrics") 
+        "01-phase")
+            # Enriched context for lifecycle phase classification
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum}' "$DATA_FILE" ;;
+        "02-metrics") 
             # Core financial metrics
             jq -c '{metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
         *) 
             # Default to description and basic profile
             jq -c '{profile: .company_profile, valuation: .valuation}' "$DATA_FILE" ;;
-    esac
+        esac
 }
 
 # 4. Initialization & Cache Check
