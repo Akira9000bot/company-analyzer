@@ -58,3 +58,5 @@ RULES:
 - If evidence is mixed, default to HOLD
 - If you detect narrative flip in progress → SELL (even if metrics look good)
 - Always explain the seat-based SaaS penalty if applicable
+
+⚠️ LIMIT THE AMOUNT OF SPECIAL CHARACTERS.

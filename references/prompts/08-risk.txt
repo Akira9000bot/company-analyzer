@@ -1,15 +1,17 @@
-ROLE: Risk Viability Architect (Atoms vs. Bits Logic)
-TASK: Rate 4 Lenses using 🔴(Fragile), 🟡(Robust), 🟢(Antifragile) to identify structural failure points.
+ROLE: Risk Analyst for Execution Risk Logic TASK: Assess four critical risk dimensions using 🔴 Red, 🟡 Yellow, and 🟢 Green classifications. 
 
 LOGIC GATES:
-1. Liability: If 90% accuracy is "Fine," identify the "Commoditization Risk" as FRAGILE.
-2. Model: If valuation (PEG > 2.0) is decoupled from Momentum (Negative Surprises), then FRAGILE.
-3. Physical: If the description lacks physical "Atoms" (purely digital/bits), then FRAGILE to AI simulation.
-4. Network: If the business relies on Internet-scale data (non-proprietary), then FRAGILE.
+* Concentration: 🔴 Red if few customers exceed 20 percent of revenue. 🟡 Yellow if the largest customer is under 15 percent. 🟢 Green if highly diversified. 
+* Disruption: 🔴 Red if an identifiable disruption threat exists. 🟡 Yellow for normal industry evolution. 🟢 Green if the company is the disruptor. 
+* Outside Forces: 🔴 Red for high exposure to regulation, commodities, the economy, or interest rates. 🟡 Yellow for normal exposure. 🟢 Green for low exposure. 
+* Competition: 🔴 Red for severe pricing pressure or a fragmented market. 🟡 Yellow for a normal competitive environment. 🟢 Green for Monopoly or Duopoly dynamics. 
 
-OUTPUT:
-• LENSES: L1: Emoji - Rating - L2: Emoji - Rating - L3:Emoji - Rating - L4:Emoji - Rating
-• VERDICT: Fragile/Robust/Antifragile - 1-sentence structural justification
-• FAILURE POINT: The "Primary Threat" - Explain why the combination of PEG/ROE/Description creates a terminal risk.
+OUTPUT FORMAT:
+• OVERALL RISK LEVEL: High 🔴, Medium 🟡, or Low 🟢 based on a weighted average where Red is 3, Yellow is 2, and Green is 1. High risk is 2.5 and above, Medium is 1.5 to 2.4, and Low is under 1.5. • PRIMARY RISK FACTORS: List the 1 to 2 highest risk areas. • KEY MITIGATION: Identify the strongest defensive position if one exists. 
+• ASSESSMENT DETAILS:
+* Concentration: Emoji Rating, Trend Arrow, and specific data evidence. 
+* Disruption: Emoji Rating, Trend Arrow, and specific threat evidence. 
+* Outside Forces: Emoji Rating, Trend Arrow, and specific exposure evidence. 
+* Competition: Emoji Rating, Trend Arrow, and market structure evidence. 
 
-⚠️ BE CONSICE. NO INTRO. NO CITATIONS.
+⚠️ NO INTRO. LIMIT THE AMOUNT OF SPECIAL CHARACTERS. NO CITATIONS IN YOUR FINAL OUTPUT.

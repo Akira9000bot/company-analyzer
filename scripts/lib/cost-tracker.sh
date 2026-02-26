@@ -35,8 +35,8 @@ check_budget() {
 log_cost() {
     local ticker="$1"
     local framework="$2"
-    local input_tokens="$3"
-    local output_tokens="$4"
+    local INPUT_TOKENS="$3"
+    local OUTPUT_TOKENS="$4"
     
     init_cost_tracker
 
@@ -45,23 +45,23 @@ log_cost() {
     if [ -f "$CONFIG_FILE" ]; then
         active_model=$(jq -r '.agents.defaults.model.primary // "google/gemini-3-flash-preview"' "$CONFIG_FILE" 2>/dev/null || echo "google/gemini-3-flash-preview")
     fi
-    
+
     # 2. Lookup prices for that specific model with safe fallbacks
-    local in_rate="0.10"
-    local out_rate="0.40"
+    local in_rate="0.50"
+    local out_rate="3.00"
     if [ -f "$PRICES_FILE" ]; then
-        in_rate=$(jq -r ".\"$active_model\".input // 0.10" "$PRICES_FILE" 2>/dev/null || echo "0.10")
-        out_rate=$(jq -r ".\"$active_model\".output // 0.40" "$PRICES_FILE" 2>/dev/null || echo "0.40")
+        in_rate=$(jq -r ".\"$active_model\".input // 0.50" "$PRICES_FILE" 2>/dev/null || echo "0.50")
+        out_rate=$(jq -r ".\"$active_model\".output // 3.00" "$PRICES_FILE" 2>/dev/null || echo "3.00")
     fi
 
     # 3. Calculate (Scale 6 for high precision on pennies)
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    local input_cost=$(echo "scale=6; $input_tokens * $in_rate / 1000000" | bc)
-    local output_cost=$(echo "scale=6; $output_tokens * $out_rate / 1000000" | bc)
+    local input_cost=$(echo "scale=6; $INPUT_TOKENS * $in_rate / 1000000" | bc)
+    local output_cost=$(echo "scale=6; $OUTPUT_TOKENS * $out_rate / 1000000" | bc)
     local total_cost=$(echo "scale=6; $input_cost + $output_cost" | bc)
     
     # 4. Save to log
-    echo "$timestamp | $ticker | $framework | $active_model | ${input_tokens}i/${output_tokens}o | \$$total_cost" >> "$COST_LOG"
+    echo "$timestamp | $ticker | $framework | $active_model | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o | \$$total_cost" >> "$COST_LOG"
     echo "  💰 $framework: \$$total_cost (Model: $active_model)"
 }
 

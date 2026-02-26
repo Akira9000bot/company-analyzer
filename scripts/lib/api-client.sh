@@ -66,9 +66,12 @@ call_llm_api() {
     check_api_key || return 1
     enforce_rate_limit
     
+    # Ensure max_tokens is a valid integer
+    local clean_tokens=$(echo "$max_tokens" | grep -oE '^[0-9]+' || echo "800")
+
     local json_payload=$(jq -n \
         --arg text "$prompt" \
-        --argjson max_tokens "$max_tokens" \
+        --argjson max_tokens "$clean_tokens" \
         '{
             contents: [{parts: [{text: $text}]}],
             generationConfig: {
@@ -120,14 +123,44 @@ call_llm_api() {
 extract_content() { echo "$1" | jq -r '.candidates[0].content.parts[0].text // empty'; }
 
 extract_usage() { 
-    local prompt_t=$(echo "$1" | jq -r '.usageMetadata.promptTokenCount // 0')
-    local cand_t=$(echo "$1" | jq -r '.usageMetadata.candidatesTokenCount // 0')
-    
-    # Proactive TPM Monitoring
-    if [ "$prompt_t" -gt 100000 ]; then
-        log_trace "WARN" "TPM" "Heavy payload detected: ${prompt_t} tokens."
+    # Args:
+    #   $1 = raw API response JSON from call_llm_api
+    #   $2 = original prompt text that was sent
+    local api_response="$1"
+    local prompt_text="$2"
+
+    # Candidate text comes from the API response
+    local cand_text
+    cand_text=$(echo "$api_response" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+    local prompt_words cand_words
+    local prompt_tokens cand_tokens
+
+    # Prompt side: tokens = 2 * (number of words in prompt text)
+    if [[ -n "$prompt_text" ]]; then
+        prompt_words=$(wc -w <<<"$prompt_text")
+        prompt_words=${prompt_words//[[:space:]]/}
+        [[ -z "$prompt_words" ]] && prompt_words=0
+    else
+        prompt_words=0
     fi
-    echo "$prompt_t $cand_t" 
+    prompt_tokens=$(( 2 * prompt_words ))
+
+    # Candidate side: tokens = 2 * (number of words in generated text)
+    if [[ -n "$cand_text" ]]; then
+        cand_words=$(wc -w <<<"$cand_text")
+        cand_words=${cand_words//[[:space:]]/}
+        [[ -z "$cand_words" ]] && cand_words=0
+    else
+        cand_words=0
+    fi
+    cand_tokens=$(( 2 * cand_words ))
+    
+    # Proactive TPM Monitoring (based on approximate token units)
+    if [ "$prompt_tokens" -gt 100000 ]; then
+        log_trace "WARN" "TPM" "Heavy payload detected: ${prompt_tokens} tokens (approx 2x words)."
+    fi
+    echo "$prompt_tokens $cand_tokens" 
 }
 
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
