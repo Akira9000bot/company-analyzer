@@ -75,12 +75,13 @@ $PROMPT_CONTENT"
 CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
 
 # 5. Cache & Budget Enforcement
-# CACHED_RESPONSE=$(cache_get "$CACHE_KEY" || echo "")
-# if [ -n "$CACHED_RESPONSE" ]; then
-#     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-#     log_trace "INFO" "$FW_ID" "Cache HIT"
-#     exit 0
-# fi
+CACHED_RESPONSE=$(cache_get "$CACHE_KEY" || echo "")
+if [ -n "$CACHED_RESPONSE" ]; then
+    echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
+    log_trace "INFO" "$FW_ID" "Cache HIT"
+    echo "$CACHED_RESPONSE"
+    exit 0
+fi
 
 if ! check_budget "$FW_ID"; then
     log_trace "ERROR" "$FW_ID" "Budget check failed"
@@ -90,12 +91,17 @@ fi
 # 6. API Execution (Gemini 3 Flash)
 API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
-read INPUT_TOKENS OUTPUT_TOKENS <<< $(extract_usage "$API_RESPONSE")
+read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$API_RESPONSE" "$FULL_PROMPT")"
 
 # 7. Final Save & Metadata
 echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
 log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
+
+# 8. Golden Nugget Extraction (Zero-Cost / No LLM)
+# Extract the first line or Phase line for the rolling context
+GOLDEN_NUGGET=$(grep -E "^• PHASE:|^PHASE:|^SCORE:|^VERDICT:" "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md" | head -n 1 || head -n 1 "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md")
+echo "$FW_ID: $GOLDEN_NUGGET" >> "$OUTPUT_DIR/${TICKER_UPPER}_rolling_context.txt"
 
 METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
 cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
