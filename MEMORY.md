@@ -19,8 +19,15 @@
   5. **Aggressive Pruning:** Context TTL is set to 15m to clear cache during idle time.
 
 ### Skills & Tools
-- **Company Analyzer:** Specialized tool for investment research (MELI, NET, SNOW, etc.). Optimization work done in Feb 2026 to reduce per-analysis costs.
+- **Company Analyzer:** Specialized tool for investment research (MELI, NET, SNOW, etc.). Optimization work done in Feb 2026 to reduce per-analysis costs. 
+  - **Chain of Thought (CoT):** Implemented rolling `SUMMARY_CONTEXT` (hand-off) between frameworks to ensure logical consistency (e.g., Phase-based scoring in metrics).
+  - **Unified Client:** Unified all scripts to use the Google Gemini 3 Flash client for reliability and cost tracking.
+- **Privacy/Storage Protocol (2026-02-27):** Do NOT commit skill analysis results (e.g., individual company buy/hold ratings or dossiers) to MEMORY.md. Keep results in local skill assets only.
 
 ## Ongoing Todos
 - [ ] Monitor Gemini 3 Flash TPM levels after heartbeat isolation.
 - [ ] Resume job search automation/research.
+- [ ] Update `company-analyzer` scripts to be path-agnostic.
+
+## Investment Research (Feb 2026)
+- Company analysis findings are stored in local skill assets (see Privacy Protocol).

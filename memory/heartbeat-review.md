@@ -1,19 +1,22 @@
-# Heartbeat Review: 2026-02-25
+# Heartbeat Review: 2026-02-28
 
 ## 1. Mistake Review
-- **Context Bloat:** `main` session hit TPM limits (~961k tokens) causing 503 errors.
-- **Protocol Fix:** Isolated heartbeats into a separate session, set 04:00 UTC daily reset for `main`, and reduced context TTL to 10m.
+- **LLM 503 (Feb 27):** Handled temporary Gemini availability spike. No system changes required.
 
-## 2. Distillation Sync
-- **2026-02-24:** `## Summary` block verified in `memory/2026-02-24.md`. All significant events (SEC narrative extraction, CIK octal bug fix, MELI/SNOW/NET analysis) captured.
+## 2. Distillation Sync (04:00 UTC Reset)
+- **2026-02-27:** `## Daily Distillation (Captured @ 03:00 UTC)` verified.
+- **2026-02-28:** `## Daily Distillation (Captured @ 03:00 UTC)` written to `memory/2026-02-28.md`.
+- **Status:** Protocol Verified.
 
 ## 3. Skill Check
-- `skills/company-analyzer`: Active and verified. Sequential pipeline with local concatenation is performing as expected with Gemini 3 Flash.
+- **Submodule Status:** `skills/company-analyzer` has uncommitted subproject changes. This is expected as we've been refining the skill.
 
 ## 4. Workspace Maintenance
-- **Git:** Uncommitted changes (M `HEARTBEAT.md`, M `memory/2026-02-24.md`). `master` is 23 behind `origin/main`.
-- **Memory:** `MEMORY.md` initialized but needs regular sync from daily files.
-- **Maintenance:** Root `assets/outputs/` directory is missing (outputs are currently localized to skills).
+- **Git:** 
+  - Significant uncommitted/untracked history files.
+  - New Privacy Protocol documented in `MEMORY.md`.
+- **Cleanup:** No orphaned temp files in `assets/outputs/`.
 
 ## 5. Memory Consolidation
-- Current `MEMORY.md` contains context protocols and investment interests. Verified.
+- Scrubbed company analysis results from `MEMORY.md` to comply with the new Privacy Protocol.
+- `MEMORY.md` is clean and up-to-date.
