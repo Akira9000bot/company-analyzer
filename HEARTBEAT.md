@@ -18,7 +18,12 @@ When the heartbeat fires, perform a fast, lightweight review:
 5.  **Workspace Maintenance:** Flag any NEW orphaned temp files in `assets/outputs/` or uncommitted Git changes.
 6.  **Memory Consolidation:** Briefly note any glaringly outdated info in `MEMORY.md` that needs archiving.
 
-**Delta Rule:** Only report NEW issues or state changes (and append them to `memory/heartbeat-review.md`). If all checks are clear and nothing has changed since the last run, reply EXACTLY: HEARTBEAT_OK.
+**Delta Rule:** Only report NEW issues or state changes. If issues are found:
+1. Append details to `memory/heartbeat-review.md`.
+2. Use the `message` tool to send a brief alert to the user (Dan).
+3. Then reply with a summary of the issues.
+
+If all checks are clear and nothing has changed since the last run, reply EXACTLY: HEARTBEAT_OK.
 
 Do not provide a "summary of current state" if the state is unchanged. Do not repeat prior warnings if they have not evolved. Complete this checklist in a single, concise response using minimal tokens. 
 

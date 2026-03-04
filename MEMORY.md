@@ -17,6 +17,7 @@
   3. **Reset Interlock:** The hourly heartbeat performs a "Pre-Reset Distillation" during the 03:00 UTC hour to capture mistakes and takeaways before the wipe.
   4. **Mandatory Distillation:** Before any reset or manual clearing, key takeaways MUST be written to `MEMORY.md` or a daily log.
   5. **Aggressive Pruning:** Context TTL is set to 15m to clear cache during idle time.
+  6. **Muted Heartbeats (2026-03-04):** Heartbeat cron delivery set to `none`. Notifications only occur via `message` tool on state changes (Delta Rule).
 
 ### Skills & Tools
 - **Company Analyzer:** Specialized tool for investment research (MELI, NET, SNOW, etc.). Optimization work done in Feb 2026 to reduce per-analysis costs. 
@@ -28,6 +29,9 @@
 - [ ] Monitor Gemini 3 Flash TPM levels after heartbeat isolation.
 - [ ] Resume job search automation/research.
 - [ ] Update `company-analyzer` scripts to be path-agnostic.
+- [ ] Commit 4 days of pending memory files (Mar 1-4).
+- [ ] Resolve uncommitted changes in `skills/company-analyzer`.
+
 
 ## Investment Research (Feb 2026)
 - Company analysis findings are stored in local skill assets (see Privacy Protocol).
