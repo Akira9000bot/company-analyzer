@@ -18,8 +18,22 @@ STRATEGIC MAPPING:
 * If Phase 3 or 4: Valuation Method: PEG Ratio, Price-to-Gross Profit, EV/Sales. Avoid: Dividend Yield. Investor Mindset: Growth at a Reasonable Price (GARP). 
 * If Phase 5 or 6: Valuation Method: P/E Ratio, Free Cash Flow Yield, Shareholder Yield (Buyback + Div). Avoid: Price-to-Sales. Investor Mindset: Value / Income / Safety. 
 
-OUTPUT:
-• PHASE: Phase # and Name - Confidence: High/Med/Low • EVIDENCE: Revenue %, FCF Status, and Share Count Trend with data points.
-• STRATEGY: Use Valuation mapped from Strategic Mapping. Avoid mapped tool. 
+---
+OUTPUT: You MUST return exactly the following three sections in order. Complete every line; partial output is invalid. Your response MUST end with the STRATEGY section (Use: ... Avoid: ...).
 
-⚠️ NO INTRO. NO CITATIONS NEEDED. LIMIT THE AMOUNT OF SPECIAL CHARACTERS.
+If a metric is unavailable, write "N/A" or "Insufficient data" for that line and continue. Still output all three EVIDENCE lines and the full STRATEGY section.
+
+PHASE:
+[Phase number and name, e.g. 3 Self-Funding.] Confidence: [High or Med or Low.]
+
+EVIDENCE:
+1. Revenue %: [Quarterly YoY % and whether it meets phase threshold.]
+2. FCF Status: [Op-Cash minus Capex: value or direction; positive/negative/breakeven.]
+3. Share Count Trend: [Dilution vs. Buyback; direction and magnitude if available.]
+
+STRATEGY:
+Use: [Exact valuation method(s) from Strategic Mapping for this phase.]
+Avoid: [Exact valuation method from Strategic Mapping for this phase.]
+
+---
+NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid).

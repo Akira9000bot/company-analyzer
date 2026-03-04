@@ -120,7 +120,16 @@ call_llm_api() {
 }
 
 # --- Aliases & Helpers ---
-extract_content() { echo "$1" | jq -r '.candidates[0].content.parts[0].text // empty'; }
+# Concatenate all content parts (Gemini can return multiple parts; using only [0] caused truncation)
+extract_content() {
+    echo "$1" | jq -r '
+        if .candidates[0].content.parts then
+            [.candidates[0].content.parts[].text // ""] | join("")
+        else
+            .candidates[0].content.parts[0].text // empty
+        end
+    '
+}
 
 extract_usage() { 
     # Args:
@@ -129,9 +138,15 @@ extract_usage() {
     local api_response="$1"
     local prompt_text="$2"
 
-    # Candidate text comes from the API response
+    # Candidate text: concatenate all parts for accurate length
     local cand_text
-    cand_text=$(echo "$api_response" | jq -r '.candidates[0].content.parts[0].text // empty')
+    cand_text=$(echo "$api_response" | jq -r '
+        if .candidates[0].content.parts then
+            [.candidates[0].content.parts[].text // ""] | join("")
+        else
+            .candidates[0].content.parts[0].text // empty
+        end
+    ')
 
     local prompt_words cand_words
     local prompt_tokens cand_tokens

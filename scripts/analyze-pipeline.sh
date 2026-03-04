@@ -30,7 +30,7 @@ TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 FW_SEQUENCE=("01-phase" "02-metrics" "07-business" "03-ai-moat" "04-strategic-moat" "06-growth" "05-sentiment" "08-risk")
 
 declare -A LIMITS=(
-    ["01-phase"]="1000" ["02-metrics"]="1200" ["03-ai-moat"]="1200"
+    ["01-phase"]="2048" ["02-metrics"]="2048" ["03-ai-moat"]="1200"
     ["04-strategic-moat"]="1200" ["05-sentiment"]="1000" ["06-growth"]="1200"
     ["07-business"]="1200" ["08-risk"]="1200"
 )
@@ -54,6 +54,10 @@ echo "---------------------------------------------------------"
 
 START_TIME=$(date +%s)
 export SUMMARY_CONTEXT="" # Export so run-framework.sh can read it
+
+# Reset rolling context for this ticker so each run has a fresh hand-off (no duplicate/leftover lines)
+ROLLING_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_rolling_context.txt"
+rm -f "$ROLLING_FILE"
 
 for fw_id in "${FW_SEQUENCE[@]}"; do
     LIMIT="${LIMITS[$fw_id]}"

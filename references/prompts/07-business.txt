@@ -7,12 +7,23 @@ LOGIC GATES:
 * Pricing: Identify if Seat-based, Usage-based, or Transactional based on the description.
 * Resilience: Evaluate revenue and net income stability and ROE (Return on Equity) to determine how the model absorbs shocks.
 
-OUTPUT FORMAT:
-• REVENUE MIX: Segment 1 percent - Segment 2 percent - Geography percent Domestic vs International
-• DYNAMICS: Pricing Model - Customer Acquisition Model
-• ANALYSIS (3 Bullets):
-* Economics: Metric, for example, ROE percent or Margin - Health assessment.
-* Resilience: Risk level - inferred from sector stability and margin buffer.
-* Scalability: 1-sentence on path to leverage or efficiency.
+---
+OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip REVENUE MIX, DYNAMICS, ECONOMICS, RESILIENCE, or SCALABILITY.
 
-⚠️ NO INTRO. NO CITATIONS. LIMIT THE AMOUNT OF SPECIAL CHARACTERS.
+REVENUE MIX:
+[Segment 1 name and percent] - [Segment 2 name and percent if applicable] - [Geography: Domestic vs International percent or breakdown.]
+
+DYNAMICS:
+Pricing: [Seat-based or Usage-based or Transactional]. Customer Acquisition: [Brief description of acquisition model.]
+
+ECONOMICS:
+[Metric, e.g. ROE percent or margin, with health assessment.]
+
+RESILIENCE:
+[Risk level] - [Inferred from sector stability and margin buffer.]
+
+SCALABILITY:
+[One sentence on path to leverage or efficiency.]
+
+---
+NO intro paragraph. NO citations. Use only the section headers above (REVENUE MIX:, DYNAMICS:, ECONOMICS:, RESILIENCE:, SCALABILITY:). Replace the bracketed placeholders with your analysis.

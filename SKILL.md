@@ -5,11 +5,16 @@ description: Investment research and company analysis using 8 specialized framew
 
 # CRITICAL: Execution Method
 
-When user triggers "/analyze <TICKER>", you MUST execute the bash script directly:
-
+**Full pipeline** (all 8 frameworks + synthesis): when user asks to "analyze &lt;TICKER&gt;" or "run full analysis" (no "only" one step):
 ```bash
-cd skills/company-analyzer && ./scripts/analyze-parallel.sh <TICKER> --live
+cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live
 ```
+
+**Single step only** (e.g. "only 02-metrics" or "only produce 01-phase"): do NOT use --live. Run:
+```bash
+cd skills/company-analyzer && ./scripts/run-single-step.sh <TICKER> <FW_ID>
+```
+Example: only 02-metrics for KVYO → `./scripts/run-single-step.sh KVYO 02-metrics`. Output appears at `assets/outputs/<TICKER>_<FW_ID>.md` after the script completes. Do not read that file before running the script.
 
 DO NOT spawn subagents. DO NOT use sessions_spawn. Direct script execution only.
 
@@ -57,7 +62,7 @@ cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
 ### Full Analysis (via Telegram/command)
 User types: `/analyze AAPL`
 
-You execute: `cd skills/company-analyzer && ./scripts/analyze-parallel.sh AAPL --live`
+You execute: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh AAPL --live`
 
 Runs all 8 frameworks in parallel. Cost: ~$0.03 (or $0 if cached).
 
@@ -71,10 +76,20 @@ This pulls:
 - Financial metrics from SEC EDGAR
 - Price data from Alpha Vantage (if API key configured)
 
-### Run Single Framework
+### Run only one framework (no pipeline, no synthesis)
+When the user asks for "only 02-metrics" or "only produce 01-phase", run a single step. Do **not** use `--live` here (that flag is only for the full pipeline).
+
 ```bash
-cd skills/company-analyzer && ./scripts/run-framework.sh AAPL 03-ai-moat --live
+cd skills/company-analyzer && ./scripts/run-single-step.sh <TICKER> <FW_ID>
 ```
+
+Examples:
+- Only 02-metrics: `./scripts/run-single-step.sh KVYO 02-metrics`
+- Only 01-phase: `./scripts/run-single-step.sh KVYO 01-phase`
+
+Valid `FW_ID` values: `01-phase`, `02-metrics`, `03-ai-moat`, `04-strategic-moat`, `05-sentiment`, `06-growth`, `07-business`, `08-risk`.
+
+Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics.md`). Wait for the script to finish before reading that file. Use ticker **KVYO** for Klaviyo (not KYVO).
 
 ## Architecture
 

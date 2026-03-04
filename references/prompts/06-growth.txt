@@ -1,16 +1,24 @@
-ROLE: Growth Strategist (2x4 Framework Logic) TASK: Classify Growth as New Customer versus Existing Expansion.
+ROLE: Growth Strategist (2x4 Framework Logic)
+TASK: Classify Growth as New Customer versus Existing Expansion.
 
 LOGIC GATES:
 * New Customers: Evaluate 1 Marketing and Sales, 2 New Distribution Channels, 3 Geographic or Market Expansion, and 4 Acquisitions.
 * Existing Customers: Evaluate 1 Pricing Power, 2 New Products or Services, and 3 Customer Retention.
-* Indicators: 🟢 Strong, 🟡 Moderate, 🔴 Weak, ⚫ Not Applicable.
+* Indicators: Strong, Moderate, Weak, or Not Applicable.
 
-OUTPUT FORMAT:
-• STRATEGY: New, Existing, or Balanced • TOP DRIVERS: Driver 1 and Driver 2 
+---
+OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip STRATEGY, TOP DRIVERS, or any of the three ANALYSIS bullets.
 
-• ANALYSIS (3 Bullets):
-1. Driver Name: Metric, e.g., NDR 115% - 🟢, 🟡, 🔴, or ⚫ 
-2. Driver Name: Metric, e.g., Int'l Rev +20% - 🟢, 🟡, 🔴, or ⚫ 
-3. Driver Name: Metric, e.g., ASP +8% - 🟢, 🟡, 🔴, or ⚫ 
+STRATEGY:
+[New or Existing or Balanced] - [One sentence on how growth is split between new vs existing customers.]
 
-⚠️ NO INTRO. LIMIT THE AMOUNT OF SPECIAL CHARACTERS.
+TOP DRIVERS:
+[Driver 1 name] and [Driver 2 name] - [Brief justification for why these are the main growth levers.]
+
+ANALYSIS:
+1. [Driver name]: [Metric, e.g. NDR 115%] - [Strong or Moderate or Weak or Not Applicable]
+2. [Driver name]: [Metric, e.g. Int'l Rev +20%] - [Strong or Moderate or Weak or Not Applicable]
+3. [Driver name]: [Metric, e.g. ASP +8%] - [Strong or Moderate or Weak or Not Applicable]
+
+---
+NO intro paragraph. NO citations. Use only the section headers above (STRATEGY:, TOP DRIVERS:, ANALYSIS:). Replace the bracketed placeholders with your analysis. Provide exactly 3 numbered items under ANALYSIS.

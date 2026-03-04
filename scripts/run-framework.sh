@@ -19,12 +19,21 @@ PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$SKILL_DIR/assets/outputs}"
 LIMIT_ARG="${5:-}"
 
+# Usage guard: this script does NOT take --live (that flag is for analyze-pipeline.sh only)
+if [[ -z "$PROMPT_FILE" || "$PROMPT_FILE" == -* ]]; then
+    echo "Usage: run-framework.sh <TICKER> <FW_ID> <PROMPT_FILE> [OUTPUT_DIR] [LIMIT]" >&2
+    echo "  Example (01-phase only): run-framework.sh KVYO 01-phase \"$SKILL_DIR/references/prompts/01-phase.txt\" \"$SKILL_DIR/assets/outputs\" 2048" >&2
+    echo "  Note: Do not pass --live. Use analyze-pipeline.sh <TICKER> --live for the full pipeline." >&2
+    exit 1
+fi
+[ ! -f "$PROMPT_FILE" ] && { echo "ERROR: Prompt file not found: $PROMPT_FILE" >&2; exit 1; }
+
 # Inherit context from analyze-pipeline.sh
 PREVIOUS_CONTEXT="${SUMMARY_CONTEXT:-None}"
 
 # Max Token Guardrails
 declare -A MAX_TOKENS=(
-    ["01-phase"]=1000 ["02-metrics"]=1200 ["03-ai-moat"]=1200 
+    ["01-phase"]=2048 ["02-metrics"]=2048 ["03-ai-moat"]=1200 
     ["04-strategic-moat"]=1200 ["05-sentiment"]=1000 ["06-growth"]=1200 
     ["07-business"]=1200 ["08-risk"]=1200
 )
@@ -35,8 +44,15 @@ FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
 
+# Require data file so we never pass empty context (avoids "N/A / Insufficient data" when wrong ticker is used)
+if [ ! -f "$DATA_FILE" ]; then
+    log_trace "ERROR" "$FW_ID" "Data file not found: $DATA_FILE"
+    echo "ERROR: No data for $TICKER_UPPER. Expected: $DATA_FILE" >&2
+    echo "  If analyzing Klaviyo, use ticker KVYO (not KYVO). Run fetch_data.sh first." >&2
+    exit 1
+fi
+
 get_relevant_context() {
-    if [ ! -f "$DATA_FILE" ]; then echo "{}"; return; fi
     case "$FW_ID" in
         "07-business")
             # Inject profile and financial metrics for business evaluation
@@ -48,7 +64,7 @@ get_relevant_context() {
             # Inject valuation and momentum for Risk analysis
             jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile}' "$DATA_FILE" ;;
         "01-phase")
-            # Enriched context for lifecycle phase classification
+            # Enriched context for lifecycle phase: profile + financial_metrics + valuation + momentum from *_data.json
             jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum}' "$DATA_FILE" ;;
         "02-metrics") 
             # Core financial metrics
@@ -59,11 +75,44 @@ get_relevant_context() {
         esac
 }
 
+# Refuse to run with empty or stub data (e.g. all N/A) so we don't get "Insufficient data" output
+check_context_not_empty() {
+    local ctx="$1"
+    if [ -z "$ctx" ] || [ "$ctx" = "{}" ]; then
+        log_trace "ERROR" "$FW_ID" "Context is empty after loading $DATA_FILE"
+        exit 1
+    fi
+    # For phase and metrics steps, require real financial data (revenue not N/A)
+    if [[ "$FW_ID" == "01-phase" || "$FW_ID" == "02-metrics" ]]; then
+        if echo "$ctx" | jq -e '(.metrics.revenue // "N/A") == "N/A"' >/dev/null 2>&1; then
+            log_trace "ERROR" "$FW_ID" "No financial metrics in data file (revenue N/A). Fetch data for $TICKER_UPPER first."
+            echo "ERROR: $DATA_FILE has no financial data (revenue N/A). Run fetch_data.sh for $TICKER_UPPER." >&2
+            echo "  Check ticker: Klaviyo is KVYO, not KYVO." >&2
+            exit 1
+        fi
+    fi
+}
+
 # 4. Initialization & Cache Check
 init_trace
 mkdir -p "$OUTPUT_DIR"
 CONTEXT=$(get_relevant_context)
+check_context_not_empty "$CONTEXT"
 PROMPT_CONTENT=$(cat "$PROMPT_FILE")
+
+# When running 02-metrics alone, inject phase from 01-phase output so the correct metric set is used
+if [[ "$FW_ID" == "02-metrics" && ( -z "$PREVIOUS_CONTEXT" || "$PREVIOUS_CONTEXT" == "None" ) ]]; then
+    PHASE_FILE="$OUTPUT_DIR/${TICKER_UPPER}_01-phase.md"
+    if [[ -f "$PHASE_FILE" ]]; then
+        PREVIOUS_CONTEXT="Phase from 01-phase (use this to select which of the 5 metric sets and thresholds to apply): $(head -n 10 "$PHASE_FILE" | tr '\n' ' ' | sed 's/  */ /g')"
+    else
+        log_trace "ERROR" "02-metrics" "01-phase output not found; 02-metrics requires phase from 01-phase"
+        echo "ERROR: 02-metrics needs the phase from 01-phase. Run 01-phase first, then 02-metrics." >&2
+        echo "  Example: run-single-step.sh $TICKER_UPPER 01-phase && run-single-step.sh $TICKER_UPPER 02-metrics" >&2
+        echo "  Expected file: $PHASE_FILE" >&2
+        exit 1
+    fi
+fi
 
 # The Context Bridge: Combine the raw data + previous framework results
 FULL_PROMPT="Company: $TICKER_UPPER
@@ -75,13 +124,39 @@ $CONTEXT
 Task Instructions:
 $PROMPT_CONTENT"
 
-CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")
+# Include output token limit in cache key so increasing the limit yields a fresh (non-truncated) response
+CACHE_KEY=$(cache_key "$TICKER_UPPER" "$FW_ID" "$FULL_PROMPT")"_max${FW_MAX_TOKENS}"
+
+# Helper: append one line to rolling context (used on both cache hit and fresh response)
+append_to_rolling_context() {
+    local outfile="$1"
+    ROLLING_FILE="$OUTPUT_DIR/${TICKER_UPPER}_rolling_context.txt"
+    get_golden_nugget() {
+        local f="$1"
+        case "$FW_ID" in
+            01-phase)  grep -A1 "^PHASE:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            02-metrics) grep -A1 "^SUMMARY:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            03-ai-moat) grep -A1 "^VERDICT:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            04-strategic-moat) grep -A1 "^RATING:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            05-sentiment) grep -A1 "^VALUATION:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            06-growth) grep -A1 "^STRATEGY:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            07-business) grep -A1 "^REVENUE MIX:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            08-risk) grep -A1 "^OVERALL RISK LEVEL:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+            *) grep -A1 "^VERDICT:\|^RATING:\|^SUMMARY:" "$f" 2>/dev/null | tail -n 1 | sed 's/^[[:space:]]*//' | head -c 120 ;;
+        esac
+    }
+    GOLDEN_NUGGET=$(get_golden_nugget "$outfile")
+    [ -z "$GOLDEN_NUGGET" ] && GOLDEN_NUGGET=$(grep -v -E '^[A-Z][A-Z_]*:$' "$outfile" 2>/dev/null | head -n 1 | sed 's/^[[:space:]]*//' | head -c 120)
+    [ -z "$GOLDEN_NUGGET" ] && GOLDEN_NUGGET="(no summary extracted)"
+    echo "$FW_ID: $GOLDEN_NUGGET" >> "$ROLLING_FILE"
+}
 
 # 5. Cache & Budget Enforcement
 CACHED_RESPONSE=$(cache_get "$CACHE_KEY" || echo "")
 if [ -n "$CACHED_RESPONSE" ]; then
     echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
     log_trace "INFO" "$FW_ID" "Cache HIT"
+    append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
     echo "$CACHED_RESPONSE"
     exit 0
 fi
@@ -91,7 +166,7 @@ if ! check_budget "$FW_ID"; then
     exit 1
 fi
 
-# 6. API Execution (Gemini 3 Flash)
+# 6. API Execution
 API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$API_RESPONSE" "$FULL_PROMPT")"
@@ -102,9 +177,7 @@ log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
 log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
 # 8. Golden Nugget Extraction (Zero-Cost / No LLM)
-# Extract the first line or Phase line for the rolling context
-GOLDEN_NUGGET=$(grep -E "^• PHASE:|^PHASE:|^SCORE:|^VERDICT:" "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md" | head -n 1 || head -n 1 "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md")
-echo "$FW_ID: $GOLDEN_NUGGET" >> "$OUTPUT_DIR/${TICKER_UPPER}_rolling_context.txt"
+append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 
 METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
 cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"

@@ -30,33 +30,28 @@ MANDATORY SCREENING CRITERIA:
    - If Phase = "Maturity" but margins EXPANDING: Possible re-rating candidate
    - If Phase = "Growth" but margins COMPRESSING: Early warning of narrative flip
 
-OUTPUT FORMAT:
+---
+OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip BINARY VERDICT, NARRATIVE FLIP RADAR, STRUCTURAL FLAGS, KEY RISKS, or INVESTMENT THESIS.
 
-```
-## 🎯 BINARY VERDICT: [BUY / HOLD / SELL]
-**Conviction:** [High / Medium / Low]
-**Price Target:** $X.XX (if applicable)
+BINARY VERDICT:
+[BUY or HOLD or SELL]. Conviction: [High or Medium or Low]. Price Target: [dollar amount if applicable, else N/A.]
 
-### 🔄 Narrative Flip Radar
-[🟢 No flip detected / 🟡 Early signals / 🔴 FLIP IMMINENT]
-Details: [2-3 sentences on narrative stability or shift]
+NARRATIVE FLIP RADAR:
+Status: [No flip detected or Early signals or FLIP IMMINENT.]
+Details: [2-3 sentences on narrative stability or shift.]
 
-### ⚠️ Structural Flags
-- [ ] Seat-based SaaS dependency: [YES/NO - penalty applied if yes]
-- [ ] AI moat concern: [YES/NO - explain if yes]
-- [ ] Phase-margin mismatch: [YES/NO - explain if yes]
+STRUCTURAL FLAGS:
+Seat-based SaaS dependency: [YES or NO. If YES, state penalty applied and justify.]
+AI moat concern: [YES or NO. If YES, explain.]
+Phase-margin mismatch: [YES or NO. If YES, explain.]
 
-### 📝 Key Risks (from 08-risk)
-[List top 2-3 risks that could trigger flip]
+KEY RISKS:
+[List top 2-3 risks from 08-risk that could trigger flip.]
 
-### 💡 Investment Thesis in 1 Sentence
-[Concise bull/bear case]
-```
+INVESTMENT THESIS:
+[One sentence: concise bull or bear case.]
 
-RULES:
-- Be decisive. No "neutral" or "watch" - force BUY/HOLD/SELL
-- If evidence is mixed, default to HOLD
-- If you detect narrative flip in progress → SELL (even if metrics look good)
-- Always explain the seat-based SaaS penalty if applicable
+---
+RULES: Be decisive. No "neutral" or "watch" - force BUY, HOLD, or SELL. If evidence is mixed, default to HOLD. If you detect narrative flip in progress, output SELL (even if metrics look good). Always explain the seat-based SaaS penalty if applicable.
 
-⚠️ LIMIT THE AMOUNT OF SPECIAL CHARACTERS.
+NO intro paragraph. NO citations. Use only the section headers above (BINARY VERDICT:, NARRATIVE FLIP RADAR:, STRUCTURAL FLAGS:, KEY RISKS:, INVESTMENT THESIS:). Replace the bracketed placeholders with your analysis.
