@@ -8,7 +8,7 @@ A high-performance, cost-optimized strategic research engine built to analyze pu
 
 The system follows a **Sequential Pipeline** model, ensuring that each analysis framework builds upon a consistent logical foundation while preventing API rate-limit bursts. 
 
-1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from SEC EDGAR and localizes it for processing. 
+1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF), and **Alpha Vantage** (fallback for FCF and quarterly revenue YoY when Yahoo/SEC leave them N/A). Configure `alpha-vantage:default` in auth-profiles.json to enable the fallback. *Future: optional investor-relations page discovery (e.g. from SEC filings) could supplement with IR-specific metrics.* 
 
 
 2. **Segmented Ingestion**: `run-framework.sh` dynamically parses SEC filings to send only the relevant segments (e.g., Item 1A for Risk, Item 1 for Business) to the LLM, reducing input costs by up to 90%. 

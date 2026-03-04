@@ -15,7 +15,7 @@ CLASSIFICATION ENGINE:
 
 STRATEGIC MAPPING:
 * If Phase 1 or 2: Valuation Method: Price-to-Sales (P/S), Gross Profit Multiple. Avoid: P/E Ratio. Investor Mindset: Speculative Growth. 
-* If Phase 3 or 4: Valuation Method: PEG Ratio, Price-to-Gross Profit, EV/Sales. Avoid: Dividend Yield. Investor Mindset: Growth at a Reasonable Price (GARP). 
+* If Phase 3 or 4: Valuation Method: Price-to-Gross Profit, EV/Sales. Avoid: Dividend Yield. Investor Mindset: Growth at a Reasonable Price (GARP). 
 * If Phase 5 or 6: Valuation Method: P/E Ratio, Free Cash Flow Yield, Shareholder Yield (Buyback + Div). Avoid: Price-to-Sales. Investor Mindset: Value / Income / Safety. 
 
 ---

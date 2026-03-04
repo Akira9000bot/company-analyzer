@@ -10,7 +10,12 @@ DATA_DIR="$(dirname "$SCRIPT_DIR")/.cache/data"
 DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
 Y_RAW="$DATA_DIR/${TICKER_UPPER}_yahoo_raw.json"
 SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
+AV_INCOME="$DATA_DIR/${TICKER_UPPER}_av_income.json"
+AV_CASHFLOW="$DATA_DIR/${TICKER_UPPER}_av_cashflow.json"
 COOKIE_FILE="$DATA_DIR/yahoo_cookie.txt"
+# Alpha Vantage key: agents/main/agent/auth-profiles.json, profile "alpha-vantage:default"
+OPENCLAW_ROOT="${OPENCLAW_HOME:-${HOME}/.openclaw}"
+AUTH_PROFILES="${OPENCLAW_ROOT}/agents/main/agent/auth-profiles.json"
 mkdir -p "$DATA_DIR"
 
 # Separate User Agents 
@@ -47,11 +52,11 @@ curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" \
 
 DESC=$(jq -r '.quoteSummary.result[0].assetProfile.longBusinessSummary // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 
-# Extract ROE from financialData where it actually lives
+# Extract ROE, margins, ROIC from financialData (used by 02-metrics and phase logic)
 ROE=$(jq -r '.quoteSummary.result[0].financialData.returnOnEquity.fmt // .quoteSummary.result[0].financialData.returnOnEquity.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
-
-# Robust PEG extraction (handles empty objects)
-PEG=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.pegRatio | if type == "object" then (.fmt // .raw // "N/A") else (. // "N/A") end' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+GROSS_MARGIN=$(jq -r '.quoteSummary.result[0].financialData.grossMargins.fmt // .quoteSummary.result[0].financialData.grossMargins.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+OP_MARGIN=$(jq -r '.quoteSummary.result[0].financialData.operatingMargins.fmt // .quoteSummary.result[0].financialData.operatingMargins.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+ROIC=$(jq -r '.quoteSummary.result[0].financialData.returnOnAssets.fmt // .quoteSummary.result[0].financialData.returnOnAssets.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 
 PRICE=$(jq -r '.quoteResponse.result[0].regularMarketPrice // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
 MCAP=$(jq -r '.quoteResponse.result[0].marketCap // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
@@ -118,6 +123,26 @@ fi
 # Shares outstanding (proxy for dilution / buybacks)
 SHARES_OUT=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding.raw // .quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 
+# Fallback: gross margin from income statement if financialData missing (gross profit / revenue)
+if [[ "$GROSS_MARGIN" == "N/A" || -z "$GROSS_MARGIN" ]]; then
+    REV_IS=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].totalRevenue.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    COST_IS=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].costOfRevenue.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    if [[ -n "$REV_IS" && -n "$COST_IS" && "$REV_IS" != "0" ]]; then
+        GROSS_MARGIN="$(echo "scale=2; ($REV_IS - $COST_IS) * 100 / $REV_IS" | bc 2>/dev/null)%"
+    fi
+fi
+# Fallback: operating margin from income statement (operatingIncome / revenue)
+if [[ "$OP_MARGIN" == "N/A" || -z "$OP_MARGIN" ]]; then
+    REV_IS=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].totalRevenue.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    OP_INC=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].operatingIncome.raw // .quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].incomeFromOperations.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    if [[ -n "$REV_IS" && -n "$OP_INC" && "$REV_IS" != "0" ]]; then
+        OP_MARGIN="$(echo "scale=2; $OP_INC * 100 / $REV_IS" | bc 2>/dev/null)%"
+    fi
+fi
+[[ -z "$GROSS_MARGIN" ]] && GROSS_MARGIN="N/A"
+[[ -z "$OP_MARGIN" ]] && OP_MARGIN="N/A"
+[[ -z "$ROIC" ]] && ROIC="N/A"
+
 # ============================================
 # Step 3: SEC Data (Final Precision)
 # ============================================
@@ -162,6 +187,49 @@ if [ -n "$CIK" ]; then
 fi
 
 # ============================================
+# Step 3.5: Alpha Vantage fallback (FCF, revenue_q_yoy)
+# Key from agents/main/agent/auth-profiles.json, profile "alpha-vantage:default".
+# Uses up to 2 API calls when key is set and Yahoo/SEC left any of these N/A.
+# ============================================
+AV_KEY=""
+if [ -f "$AUTH_PROFILES" ]; then
+    AV_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || true)
+fi
+if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" ) ]]; then
+    echo "🔍 Alpha Vantage fallback for FCF / quarterly revenue..."
+    BASE_AV="https://www.alphavantage.co/query"
+    if [ "$REV_Q_YOY" = "N/A" ]; then
+        curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
+        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_INCOME" >/dev/null 2>&1; then
+            # quarterlyReports: [0]=latest, [4]=same quarter prior year (if 5 quarters available)
+            REV_Q_CURR=$(jq -r '.quarterlyReports[0].totalRevenue // empty' "$AV_INCOME" 2>/dev/null)
+            REV_Q_PREV=$(jq -r '.quarterlyReports[4].totalRevenue // .quarterlyReports[1].totalRevenue // empty' "$AV_INCOME" 2>/dev/null)
+            if [[ -n "$REV_Q_CURR" && -n "$REV_Q_PREV" && "$REV_Q_PREV" != "0" ]]; then
+                REV_Q_YOY=$(echo "scale=4; ($REV_Q_CURR - $REV_Q_PREV) * 100 / $REV_Q_PREV" | bc 2>/dev/null || echo "N/A")
+            fi
+        fi
+        sleep 2
+    fi
+    if [ "$FCF" = "N/A" ]; then
+        curl -s "${BASE_AV}?function=CASH_FLOW&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_CASHFLOW"
+        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_CASHFLOW" >/dev/null 2>&1; then
+            # Alpha Vantage: operatingCashflow, capitalExpenditures (capex often negative)
+            OP_CF_AV=$(jq -r '.annualReports[0].operatingCashflow // empty' "$AV_CASHFLOW" 2>/dev/null)
+            CAPEX_AV=$(jq -r '.annualReports[0].capitalExpenditures // empty' "$AV_CASHFLOW" 2>/dev/null)
+            if [[ -n "$OP_CF_AV" && "$OP_CF_AV" != "None" ]]; then
+                if [[ -n "$CAPEX_AV" && "$CAPEX_AV" != "None" && "$CAPEX_AV" != "0" ]]; then
+                    # Capex is typically negative; FCF = operating + capex (e.g. 100 + (-20) = 80)
+                    FCF=$(echo "scale=0; $OP_CF_AV + $CAPEX_AV" | bc 2>/dev/null || echo "$OP_CF_AV")
+                else
+                    FCF="$OP_CF_AV"
+                fi
+            fi
+        fi
+    fi
+    rm -f "$AV_INCOME" "$AV_CASHFLOW"
+fi
+
+# ============================================
 # Step 4: Final JSON Compilation
 # ============================================
 echo "💾 Compiling Unified Dataset..."
@@ -181,7 +249,9 @@ jq -n \
     --arg price "$PRICE" \
     --arg cap "$MCAP" \
     --arg roe "$ROE" \
-    --arg peg "$PEG" \
+    --arg gross_margin "$GROSS_MARGIN" \
+    --arg op_margin "$OP_MARGIN" \
+    --arg roic "$ROIC" \
     --argjson surprise "$SURPRISE" \
     '{
         ticker: $ticker,
@@ -191,6 +261,9 @@ jq -n \
             revenue: $rev, 
             net_income: $ni, 
             roe: $roe,
+            gross_margin: $gross_margin,
+            operating_margin: $op_margin,
+            roic: $roic,
             revenue_yoy: $rev_yoy,
             net_income_yoy: $ni_yoy,
             revenue_q: $rev_q,
@@ -200,7 +273,7 @@ jq -n \
             fcf: $fcf,
             shares_outstanding: $shares_out
         },
-        valuation: { current_price: $price, market_cap: $cap, peg_ratio: $peg },
+        valuation: { current_price: $price, market_cap: $cap },
         momentum: { earnings_surprises: $surprise }
     }' > "$DATA_FILE"
 

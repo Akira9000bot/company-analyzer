@@ -51,7 +51,7 @@ export SUMMARY_CONTEXT="None"
 
 for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
     echo -n "  🔄 $fw_id... "
-    ./scripts/run-framework.sh "$TICKER_UPPER" "$fw_id" "$PROMPTS_DIR/$fw_id.txt" "$OUTPUTS_DIR" > /dev/null
+    "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPTS_DIR/$fw_id.txt" "$OUTPUTS_DIR" > /dev/null
     
     # Update SUMMARY_CONTEXT for next framework (Tail -n 3 to keep it small)
     if [ -f "$ROLLING_CONTEXT_FILE" ]; then

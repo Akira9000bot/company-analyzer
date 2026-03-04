@@ -24,8 +24,9 @@ if [ -f "$AUTH_PROFILES" ]; then
 fi
 
 # 3. RESILIENCE CONFIG
-MAX_RETRIES=3
+MAX_RETRIES=5
 RETRY_DELAY_BASE=2
+RETRY_DELAY_503=8
 
 # 4. RATE LIMITING STATE
 GEMINI_REQ_COUNT=0
@@ -107,8 +108,12 @@ call_llm_api() {
         
         # 3. Transient Server Errors (500+)
         if [[ "$http_code" -ge 500 ]]; then
-            log_trace "WARN" "API" "Server error (HTTP $http_code). Retrying..."
-            sleep $((RETRY_DELAY_BASE * attempt))
+            log_trace "WARN" "API" "Server error (HTTP $http_code). Retrying $attempt/$MAX_RETRIES..."
+            if [ "$http_code" = "503" ]; then
+                sleep $((RETRY_DELAY_503 * attempt))
+            else
+                sleep $((RETRY_DELAY_BASE * attempt))
+            fi
             attempt=$((attempt + 1))
         else
             # 4. Fatal Errors (400, 401, 403, 404)

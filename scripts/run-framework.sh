@@ -58,7 +58,7 @@ get_relevant_context() {
             # Inject profile and financial metrics for business evaluation
             jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
         "03-ai-moat") 
-            # Inject ROE, PEG, and Earnings Surprises for Moat inference
+            # Inject ROE, valuation, and Earnings Surprises for Moat inference
             jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description}' "$DATA_FILE" ;;
         "08-risk") 
             # Inject valuation and momentum for Risk analysis

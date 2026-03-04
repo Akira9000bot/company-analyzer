@@ -114,8 +114,8 @@ Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics
 
 ## Configuration
 
-### Alpha Vantage (Price Data)
-Add to `~/.openclaw/agents/main/agent/auth-profiles.json`:
+### Alpha Vantage (fallback for FCF, revenue_q_yoy)
+When Yahoo/SEC leave `fcf` or `revenue_q_yoy` as N/A, fetch_data.sh uses Alpha Vantage if a key is configured. Add to `~/.openclaw/agents/main/agent/auth-profiles.json`:
 ```json
 {
   "profiles": {
@@ -125,8 +125,7 @@ Add to `~/.openclaw/agents/main/agent/auth-profiles.json`:
   }
 }
 ```
-
-Free tier: 25 API calls/day
+Uses: INCOME_STATEMENT (quarterly revenue for YoY), CASH_FLOW (FCF). Free tier: 25 API calls/day; script uses up to 2 calls per ticker with 2s delay between.
 
 ### Moonshot API
 Already configured via OpenClaw auth profiles.
@@ -155,10 +154,14 @@ All analyses saved to `assets/outputs/`:
 
 ## Troubleshooting
 
-**"Alpha Vantage rate limit":
+**"Alpha Vantage rate limit":**
 - Free tier = 25 calls/day
 - Price data falls back to N/A, analysis continues with SEC data only
 
+**"Analysis failed (code 1)" / Heartbeat alert after 01-phase or 02-metrics:**
+- Usually caused by **HTTP 503 (Service Unavailable)** from Gemini during peak hours. The pipeline aborts on first framework failure.
+- **Fix:** Re-run `/analyze <TICKER>` later; the API client retries 503 up to 5 times with longer backoff. If it still fails, try again in 30–60 minutes.
+- Always run from the skill directory: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live` (or `analyze.sh`) so script paths resolve correctly.
+
 **Framework failures:**
-- Individual frameworks can fail without stopping entire analysis
-- Check `assets/outputs/` for partial results
+- If a step fails, the pipeline exits with code 1 and stops. Partial outputs (e.g. 01-phase, 02-metrics) remain in `assets/outputs/`.
