@@ -10,11 +10,16 @@ SCORING (Green = strong, Yellow = okay, Red = weak):
 * Phase 6 (Decline): No metrics scored. Framework advises avoiding these companies.
 
 ---
-OUTPUT: Start your response immediately with the line "METRICS:" then list exactly 5 metric lines. End with "SUMMARY:" and one sentence. Do not write any text, explanation, or narrative before METRICS: or between the two sections.
+OUTPUT: Start with "METRICS:" then exactly 5 numbered lines, then "SUMMARY:" and one sentence. Keep each metric to one short line: value, color, and a few words only. Never stop after line 3 or 4; always output lines 1-5 then SUMMARY.
 
 METRICS:
-One line per metric in this form: "Metric name: [value or N/A] - [Green or Yellow or Red]. [Brief reason.]"
-Phase 1 (in order): Revenue, Gross Margin, Cash Runway, Revenue vs. Estimates, Shares Out 3YR CAGR.
+Use this exact format, one line per metric (short reason only):
+1. [Metric name]: [value or N/A] - [Green or Yellow or Red]. [Few words.]
+2. ...
+3. ...
+4. ...
+5. ...
+Phase 1 order: Revenue, Gross Margin, Cash Runway, Revenue vs. Estimates, Shares Out 3YR CAGR.
 Phase 2: Revenue Momentum, Rule of 40, Net Dollar Retention, Gross Margin Direction, Shares Out YoY.
 Phase 3: Revenue 3YR CAGR, Gross Margin Direction, Operating Margin, Free Cash Flow, Shares Out 3YR CAGR.
 Phase 4: Revenue 3YR CAGR, Operating Margin, FCF Margin, Earnings vs. Estimates, ROIC.
@@ -22,7 +27,7 @@ Phase 5: Revenue 3YR CAGR, FCF/Net Income, EBIT/Interest Expense, ROIC, Capital 
 Phase 6: One line only: "Phase 6 (Decline): No metrics scored. Framework advises avoiding."
 
 SUMMARY:
-[One sentence: Strong (4-5 Green), Mixed (2-3 Green), or Weak (0-1 Green). Or Phase 6: "Decline phase; framework advises avoiding."]
+[One short sentence: Strong / Mixed / Weak, or "Decline phase; avoid."]
 
 ---
-Your first line must be "METRICS:". Your last block must be "SUMMARY:" followed by one sentence. No intro. No citations. Use only Green, Yellow, or Red for scores.
+Your first line must be "METRICS:". Your last line must be the SUMMARY sentence. No intro. No citations. Use only Green, Yellow, or Red. Output all 5 numbered metric lines then SUMMARY; partial output is invalid.

@@ -7,18 +7,18 @@ LOGIC GATES:
 * Indicators: Strong, Moderate, Weak, or Not Applicable.
 
 ---
-OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip STRATEGY, TOP DRIVERS, or any of the three ANALYSIS bullets.
+OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with ANALYSIS (all 3 numbered lines). Keep each section concise so you finish all three.
 
 STRATEGY:
-[New or Existing or Balanced] - [One sentence on how growth is split between new vs existing customers.]
+[New or Existing or Balanced] - [One sentence on how growth is split.]
 
 TOP DRIVERS:
-[Driver 1 name] and [Driver 2 name] - [Brief justification for why these are the main growth levers.]
+[Driver 1] and [Driver 2] - [One short sentence on why these are main levers.]
 
 ANALYSIS:
-1. [Driver name]: [Metric, e.g. NDR 115%] - [Strong or Moderate or Weak or Not Applicable]
-2. [Driver name]: [Metric, e.g. Int'l Rev +20%] - [Strong or Moderate or Weak or Not Applicable]
-3. [Driver name]: [Metric, e.g. ASP +8%] - [Strong or Moderate or Weak or Not Applicable]
+1. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
+2. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
+3. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (STRATEGY:, TOP DRIVERS:, ANALYSIS:). Replace the bracketed placeholders with your analysis. Provide exactly 3 numbered items under ANALYSIS.
+NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines.
