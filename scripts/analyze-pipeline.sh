@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # analyze-pipeline.sh - Momentum-Aware Analysis Pipeline
-# Optimized for Gemini 3 Flash and Enriched JSON datasets.
+# Uses OpenClaw-configured LLM and enriched JSON datasets.
 #
 
 set -euo pipefail
@@ -89,7 +89,7 @@ SYNTH_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_FINAL_REPORT.md"
 {
     echo "# Strategic Research Dossier: $TICKER_UPPER"
     echo "Analysis Date: $(date)"
-    echo "Model: Gemini 3 Flash"
+    echo "Model: $(jq -r '.agents.defaults.model.primary // "LLM"' "${CONFIG_FILE:-$HOME/.openclaw/openclaw.json}" 2>/dev/null | awk -F'/' '{print $NF}' || echo "LLM")"
     echo "---"
     for fw_id in "${FW_SEQUENCE[@]}"; do
         FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
@@ -107,6 +107,6 @@ echo "✅ Dossier saved to $SYNTH_FILE"
 if [ ${#FAILED_STEPS[@]} -gt 0 ]; then
     echo ""
     echo "⚠️ Pipeline had ${#FAILED_STEPS[@]} failed step(s): ${FAILED_STEPS[*]}"
-    echo "   Partial report includes successful steps only. Common cause: Gemini 503 (Service Unavailable). Re-run later."
+    echo "   Partial report includes successful steps only. Common cause: API 503 (Service Unavailable). Re-run later."
     exit 1
 fi

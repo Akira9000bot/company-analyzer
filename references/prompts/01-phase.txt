@@ -36,4 +36,4 @@ Use: [Exact valuation method(s) from Strategic Mapping for this phase.]
 Avoid: [Exact valuation method from Strategic Mapping for this phase.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid).
+NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid). Your last line must start with "Avoid:" so the response is complete; do not stop generating before that line.
