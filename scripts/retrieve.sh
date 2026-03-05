@@ -56,6 +56,6 @@ if [ -f "$FILE" ]; then
     cat "$FILE"
 else
     echo "Not found: $TICKER_UPPER framework $FRAMEWORK"
-    echo "Run: ./analyze.sh $TICKER_UPPER $FRAMEWORK"
+    echo "Run: ./scripts/run-single-step.sh $TICKER_UPPER $FW_ID"
     exit 1
 fi
