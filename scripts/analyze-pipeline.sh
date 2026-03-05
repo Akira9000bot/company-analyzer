@@ -29,9 +29,9 @@ TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 FW_SEQUENCE=("01-phase" "02-metrics" "07-business" "03-ai-moat" "04-strategic-moat" "06-growth" "05-sentiment" "08-risk")
 
 declare -A LIMITS=(
-    ["01-phase"]="2048" ["02-metrics"]="2048" ["03-ai-moat"]="1200"
-    ["04-strategic-moat"]="2048" ["05-sentiment"]="1000" ["06-growth"]="1200"
-    ["07-business"]="1200" ["08-risk"]="1200"
+    ["01-phase"]="2048" ["02-metrics"]="4096" ["03-ai-moat"]="1200"
+    ["04-strategic-moat"]="2048" ["05-sentiment"]="2048" ["06-growth"]="2048"
+    ["07-business"]="1200" ["08-risk"]="2048"
 )
 
 # 4. Initialize

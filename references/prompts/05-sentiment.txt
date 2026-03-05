@@ -8,10 +8,10 @@ LOGIC GATES:
 * Catalyst: Identify the next specific upcoming event, earnings date, or major launch.
 
 ---
-OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip VALUATION, SENTIMENT, NEXT CATALYST, BULL CASE, BEAR CASE, or RATIONALE.
+OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with RATIONALE. Keep each section concise (1-2 sentences or bullets) so you finish all six.
 
 VALUATION:
-[Cheap or Fair or Expensive] - [One sentence tying to price context if needed.]
+[Cheap or Fair or Expensive] - [One sentence tying to price context.]
 
 SENTIMENT:
 Analysts: [Bullish or Neutral or Bearish] (Confidence: High or Medium or Low)
@@ -19,18 +19,18 @@ Investors: [Bullish or Neutral or Bearish] (Confidence: High or Medium or Low)
 Media: [Positive or Mixed or Negative]
 
 NEXT CATALYST:
-[Event name and date, e.g. earnings date or major launch.]
+[Event and date, e.g. earnings or launch.]
 
 BULL CASE:
 1. [First bullish argument.]
-2. [Second bullish argument. Provide at least 2.]
+2. [Second bullish argument.]
 
 BEAR CASE:
 1. [First bearish argument.]
-2. [Second bearish argument. Provide at least 2.]
+2. [Second bearish argument.]
 
 RATIONALE:
 [One sentence linking price cause and effect.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (VALUATION:, SENTIMENT:, NEXT CATALYST:, BULL CASE:, BEAR CASE:, RATIONALE:). Replace the bracketed placeholders with your analysis.
+NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. Before finishing, ensure you have written all six sections ending with RATIONALE.

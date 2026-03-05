@@ -10,7 +10,7 @@ LOGIC GATES:
 Overall risk scoring: Red = 3, Yellow = 2, Green = 1. High = weighted average 2.5 and above, Medium = 1.5 to 2.4, Low = under 1.5.
 
 ---
-OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip OVERALL RISK LEVEL, PRIMARY RISK FACTORS, KEY MITIGATION, or any ASSESSMENT DETAILS line.
+OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with ASSESSMENT DETAILS (all 4 lines: Concentration, Disruption, Outside Forces, Competition).
 
 OVERALL RISK LEVEL:
 [High or Medium or Low] - [Weighted average and brief justification.]
@@ -29,4 +29,4 @@ Outside Forces: [Red or Yellow or Green] - [Trend: Improving or Stable or Worsen
 Competition: [Red or Yellow or Green] - [Trend: Improving or Stable or Worsening] - [Market structure evidence.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (OVERALL RISK LEVEL:, PRIMARY RISK FACTORS:, KEY MITIGATION:, ASSESSMENT DETAILS:). Replace the bracketed placeholders with your analysis.
+NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Before finishing, ensure you have written all four sections ending with the four ASSESSMENT DETAILS lines.
