@@ -69,16 +69,16 @@ enforce_rate_limit() {
 
 call_llm_api() {
     local prompt="$1"
-    local max_tokens="${2:-800}"
+    local max_tokens="${2:-8192}"
     local attempt=1
     
     check_api_key || return 1
     enforce_rate_limit
     
-    # Ensure max_tokens is a valid positive integer (0 or empty can break jq/API)
-    local clean_tokens=$(echo "$max_tokens" | grep -oE '^[0-9]+' || echo "800")
-    [ -z "$clean_tokens" ] && clean_tokens=800
-    [ "${clean_tokens:-0}" -le 0 ] 2>/dev/null && clean_tokens=800
+    # Ensure max_tokens is a valid positive integer (0 or empty can break jq/API); default 8192 so output is not truncated
+    local clean_tokens=$(echo "$max_tokens" | grep -oE '^[0-9]+' || echo "8192")
+    [ -z "$clean_tokens" ] && clean_tokens=8192
+    [ "${clean_tokens:-0}" -le 0 ] 2>/dev/null && clean_tokens=8192
 
     local json_payload=$(jq -n \
         --arg text "$prompt" \
