@@ -5,7 +5,7 @@
 COST_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COST_SKILL_DIR="$(cd "$COST_LIB_DIR/../.." && pwd)"
 PRICES_FILE="$COST_LIB_DIR/prices.json"
-CONFIG_FILE="${HOME}/.openclaw/openclaw.json"
+CONFIG_FILE="${OPENCLAW_CONFIG:-${HOME}/.openclaw/openclaw.json}"
 COST_LOG="$COST_SKILL_DIR/.cache/costs.log"
 DAILY_BUDGET=0.10
 
@@ -35,16 +35,17 @@ check_budget() {
 log_cost() {
     local ticker="$1"
     local framework="$2"
-    local INPUT_TOKENS="$3"
-    local OUTPUT_TOKENS="$4"
-    
+    local INPUT_TOKENS="${3:-0}"
+    local OUTPUT_TOKENS="${4:-0}"
+
     init_cost_tracker
 
-    # 1. Determine active model with safe fallback
-    local active_model="google/gemini-3-flash-preview"
+    # 1. Active model from OpenClaw config (no hardcoded provider/model)
+    local active_model=""
     if [ -f "$CONFIG_FILE" ]; then
-        active_model=$(jq -r '.agents.defaults.model.primary // "google/gemini-3-flash-preview"' "$CONFIG_FILE" 2>/dev/null || echo "google/gemini-3-flash-preview")
+        active_model=$(jq -r '.agents.defaults.model.primary // empty' "$CONFIG_FILE" 2>/dev/null)
     fi
+    [ -z "$active_model" ] && active_model="unknown"
 
     # 2. Lookup prices for that specific model with safe fallbacks
     local in_rate="0.50"

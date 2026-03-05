@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# analyze.sh - Unified Company Analysis (Gemini-Powered)
+# analyze.sh - Unified Company Analysis (LLM-powered via OpenClaw config)
 # Usage: ./analyze.sh <TICKER> [--live]
 #
 

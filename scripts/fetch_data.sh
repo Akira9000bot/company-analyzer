@@ -14,15 +14,16 @@ AV_INCOME="$DATA_DIR/${TICKER_UPPER}_av_income.json"
 AV_CASHFLOW="$DATA_DIR/${TICKER_UPPER}_av_cashflow.json"
 AV_BALANCE="$DATA_DIR/${TICKER_UPPER}_av_balance.json"
 COOKIE_FILE="$DATA_DIR/yahoo_cookie.txt"
-# Alpha Vantage key: agents/main/agent/auth-profiles.json, profile "alpha-vantage:default"
+# Alpha Vantage: key from OpenClaw auth profiles (profile alpha-vantage:default)
 OPENCLAW_ROOT="${OPENCLAW_HOME:-${HOME}/.openclaw}"
-AUTH_PROFILES="${OPENCLAW_ROOT}/agents/main/agent/auth-profiles.json"
+AUTH_PROFILES="${OPENCLAW_AUTH_PROFILES:-${OPENCLAW_ROOT}/agents/main/agent/auth-profiles.json}"
 mkdir -p "$DATA_DIR"
 
 # Separate User Agents 
 # Yahoo requires a "Browser" agent. SEC requires a "Bot/Email" agent.
 YAHOO_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-SEC_AGENT="akira9000bot@gmail.com" # Required by SEC EDGAR guidelines
+# SEC EDGAR requires a User-Agent with contact info. Set SEC_EDGAR_USER_AGENT or use placeholder.
+SEC_AGENT="${SEC_EDGAR_USER_AGENT:-OpenClaw-Research-Bot/1.0 (mailto:your-email@example.com)}"
 
 # ============================================
 # Helper: SEC Value Extraction
@@ -228,7 +229,7 @@ fi
 
 # ============================================
 # Step 3.5: Alpha Vantage fallback (FCF, revenue_q_yoy)
-# Key from agents/main/agent/auth-profiles.json, profile "alpha-vantage:default".
+# Key from OpenClaw auth profiles (profile alpha-vantage:default).
 # Uses up to 2 API calls when key is set and Yahoo/SEC left any of these N/A.
 # ============================================
 AV_KEY=""

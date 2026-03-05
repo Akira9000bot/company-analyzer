@@ -158,14 +158,40 @@ append_to_rolling_context() {
     echo "$FW_ID: $GOLDEN_NUGGET" >> "$ROLLING_FILE"
 }
 
-# 5. Cache & Budget Enforcement
+# 5. Output validation (detect truncation by required end-marker per framework)
+validate_framework_output() {
+    local content="$1"
+    local marker=""
+    case "$FW_ID" in
+        01-phase)  marker="Avoid:" ;;
+        02-metrics) marker="SUMMARY:" ;;
+        03-ai-moat) marker="CRITICAL FAILURE POINT:" ;;
+        04-strategic-moat) marker="THREAT:" ;;
+        05-sentiment) marker="RATIONALE:" ;;
+        06-growth)   marker="ANALYSIS:" ;;
+        07-business) marker="SCALABILITY:" ;;
+        08-risk)    marker="ASSESSMENT DETAILS:" ;;
+        *) return 0 ;;
+    esac
+    [ -z "$marker" ] && return 0
+    if echo "$content" | grep -qF "$marker"; then
+        return 0
+    fi
+    log_trace "WARN" "$FW_ID" "Output missing required end-marker: $marker (possible truncation)"
+    return 1
+}
+
+# 6. Cache & Budget Enforcement
 CACHED_RESPONSE=$(cache_get "$CACHE_KEY" || echo "")
 if [ -n "$CACHED_RESPONSE" ]; then
-    echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-    log_trace "INFO" "$FW_ID" "Cache HIT"
-    append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
-    echo "$CACHED_RESPONSE"
-    exit 0
+    if validate_framework_output "$CACHED_RESPONSE"; then
+        echo "$CACHED_RESPONSE" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
+        log_trace "INFO" "$FW_ID" "Cache HIT"
+        append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
+        echo "$CACHED_RESPONSE"
+        exit 0
+    fi
+    log_trace "WARN" "$FW_ID" "Cached response truncated; bypassing cache and calling API"
 fi
 
 if ! check_budget "$FW_ID"; then
@@ -173,20 +199,34 @@ if ! check_budget "$FW_ID"; then
     exit 1
 fi
 
-# 6. API Execution
+# 7. API Execution
 API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$API_RESPONSE" "$FULL_PROMPT")"
 
-# 7. Final Save & Metadata
+# 8. Final Save & Metadata
 echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 log_cost "$TICKER_UPPER" "$FW_ID" "$INPUT_TOKENS" "$OUTPUT_TOKENS"
 log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
-# 8. Golden Nugget Extraction (Zero-Cost / No LLM)
+# 9. Golden Nugget Extraction
 append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 
-METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
-cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
-
-echo "✅ $FW_ID complete"
+# Cache only if output passed validation (do not cache truncated responses)
+if validate_framework_output "$CONTENT"; then
+    METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
+    cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
+    echo "✅ $FW_ID complete"
+else
+    # Diagnose why: finishReason + output token count vs limit (only for fresh API response)
+    read -r finish_reason out_tokens max_tokens <<< "$(extract_finish_info "$API_RESPONSE" "$FW_MAX_TOKENS" 2>/dev/null || echo "? ? ?")"
+    log_trace "TRUNC" "$FW_ID" "finishReason=$finish_reason outTokens=$out_tokens limit=$max_tokens"
+    if [ "$finish_reason" = "MAX_TOKENS" ]; then
+        echo "⚠️  $FW_ID truncated: hit token limit ($out_tokens/$max_tokens). Increase limit for this framework or shorten prompt." >&2
+    elif [ "$finish_reason" = "STOP" ] || [ "$finish_reason" = "END_TURN" ]; then
+        echo "⚠️  $FW_ID truncated: model stopped early (STOP, ${out_tokens} tokens). Prompt may need stronger 'must complete through Avoid:' instruction." >&2
+    else
+        echo "⚠️  $FW_ID output incomplete (finishReason=$finish_reason). Re-run step; response not cached." >&2
+    fi
+    exit 1
+fi

@@ -1,6 +1,6 @@
 # Company Analyzer 🛡️
 
-A high-performance, cost-optimized strategic research engine built to analyze public companies using SEC filings and the **Gemini 3 Flash** model. This tool implements a structured, 8-stage sequential pipeline to evaluate business phases, moats, and execution risks for long-term investment conviction. 
+A high-performance, cost-optimized strategic research engine that analyzes public companies using SEC filings and your **OpenClaw-configured LLM**. It implements a structured, 8-stage sequential pipeline to evaluate business phases, moats, and execution risks for long-term investment conviction. 
 
 ---
 
@@ -8,7 +8,7 @@ A high-performance, cost-optimized strategic research engine built to analyze pu
 
 The system follows a **Sequential Pipeline** model, ensuring that each analysis framework builds upon a consistent logical foundation while preventing API rate-limit bursts. 
 
-1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF), and **Alpha Vantage** (fallback for FCF and quarterly revenue YoY when Yahoo/SEC leave them N/A). Configure `alpha-vantage:default` in auth-profiles.json to enable the fallback. *Future: optional investor-relations page discovery (e.g. from SEC filings) could supplement with IR-specific metrics.* 
+1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF), and **Alpha Vantage** (fallback for FCF and quarterly revenue YoY when Yahoo/SEC leave them N/A). Configure the Alpha Vantage profile in OpenClaw auth profiles to enable the fallback. *Future: optional investor-relations page discovery (e.g. from SEC filings) could supplement with IR-specific metrics.* 
 
 
 2. **Segmented Ingestion**: `run-framework.sh` dynamically parses SEC filings to send only the relevant segments (e.g., Item 1A for Risk, Item 1 for Business) to the LLM, reducing input costs by up to 90%. 
@@ -46,7 +46,7 @@ The system follows a **Sequential Pipeline** model, ensuring that each analysis 
 
 ## ⚡ Key Features
 
-* **Cost Efficiency**: Fully optimized for the **Gemini 3 Flash Paid Tier**, achieving a total analysis cost of **<$0.01 per run**. 
+* **Cost Efficiency**: Cost depends on your configured LLM and pricing; cost tracking uses `scripts/lib/prices.json` (keyed by model id). 
 
 
 * **Dynamic API Client**: Configuration-driven rate limiting (250+ RPM) with automatic model fallback and resilience retries. 
@@ -101,10 +101,12 @@ Generate a summary of all research costs and token usage:
 
 ## 🛠️ Configuration
 
-* **API Configuration**: Managed via `~/.openclaw/agents/main/agent/auth-profiles.json`. 
+* **API configuration**: Model and API keys are read from OpenClaw config (no hardcoded provider or keys). Set your LLM and auth in OpenClaw; the skill uses the primary model and the matching auth profile (`{provider}:default`). 
 
 
-* **Pricing Data**: Update `scripts/lib/prices.json` to adjust for model pricing changes. 
+* **Pricing**: Add your model's pricing to `scripts/lib/prices.json` (key = model id from OpenClaw config) for cost tracking. See `scripts/lib/prices.README.md`.
+
+* **LLM provider**: The built-in API client uses a request/response format compatible with Google Generative AI–style APIs. The model and key are read from OpenClaw config; other providers with a compatible API (same URL shape and JSON format) can be used by configuring that provider in OpenClaw. 
 
 
-* **Global Settings**: Rate limits and default models are pulled dynamically from `~/.openclaw/openclaw.json`.
+* **Global settings**: Rate limits and the default model are read from OpenClaw config. Add your model’s pricing to `scripts/lib/prices.json` (key = model id, e.g. `provider/model-id`) for cost tracking.
