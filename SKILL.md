@@ -102,7 +102,7 @@ Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics
 - **`lib/api-client.sh`** - Moonshot API with retry logic
 
 ### Caching
-- Location: `/.openclaw/cache/company-analyzer/responses/`
+- Location: `skills/company-analyzer/.cache/responses/` (skill dir); falls back to `~/.openclaw/cache/company-analyzer/responses/` if skill dir is read-only
 - TTL: 7 days
 - Key: `TICKER_FWID_PROMPT_HASH`
 - Cached responses show: `💰 framework: $0.0000 (cached)`
@@ -158,10 +158,13 @@ All analyses saved to `assets/outputs/`:
 - Free tier = 25 calls/day
 - Price data falls back to N/A, analysis continues with SEC data only
 
+**"API key has run out of credits" / "insufficient balance" / 1M TPM spike:**
+- Caused by **billing or TPM (tokens per minute) limit** on the Gemini API key. The pipeline now uses a **45s cooldown** between steps to reduce TPM spikes.
+- **Fix:** Top up the key in Google AI Studio, or switch to another API key in `auth-profiles.json`. Avoid running many analyses back-to-back; space runs by at least a few minutes.
+
 **"Analysis failed (code 1)" / Heartbeat alert after 01-phase or 02-metrics:**
-- Usually caused by **HTTP 503 (Service Unavailable)** from Gemini during peak hours. The pipeline aborts on first framework failure.
-- **Fix:** Re-run `/analyze <TICKER>` later; the API client retries 503 up to 5 times with longer backoff. If it still fails, try again in 30–60 minutes.
-- Always run from the skill directory: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live` (or `analyze.sh`) so script paths resolve correctly.
+- Often **HTTP 503** (Service Unavailable) or **billing/quota (402, 403)**. The pipeline continues after a failed step and still builds a partial report.
+- **Fix:** For 503, re-run later. For billing, top up or switch key (see above). Run from the skill directory: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live`.
 
 **Framework failures:**
-- If a step fails, the pipeline exits with code 1 and stops. Partial outputs (e.g. 01-phase, 02-metrics) remain in `assets/outputs/`.
+- Failed steps are listed at the end; partial outputs remain in `assets/outputs/`. Check `assets/traces/<TICKER>_<date>.trace` for which step failed and why.

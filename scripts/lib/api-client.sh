@@ -106,9 +106,22 @@ call_llm_api() {
             continue
         fi
         
+        # 2b. Billing / quota (402, 403 with billing message) - do not retry
+        if [ "$http_code" = "402" ] || [ "$http_code" = "403" ]; then
+            if echo "$body" | grep -qiE 'billing|quota|credit|balance|insufficient'; then
+                log_trace "ERROR" "API" "Billing/quota (HTTP $http_code). Top up or switch API key."
+                echo "ERROR: API billing/quota (HTTP $http_code). Your API key may be out of credits or over TPM. Top up in Google AI Studio or switch key." >&2
+                return 1
+            fi
+        fi
+        
         # 3. Transient Server Errors (500+)
         if [[ "$http_code" -ge 500 ]]; then
             log_trace "WARN" "API" "Server error (HTTP $http_code). Retrying $attempt/$MAX_RETRIES..."
+            if [ "$attempt" -eq "$MAX_RETRIES" ]; then
+                log_trace "ERROR" "API" "Failed after $MAX_RETRIES attempts (last HTTP $http_code). Try again later."
+                echo "ERROR: Gemini API failed after $MAX_RETRIES attempts (last HTTP $http_code). Try again in 30-60 min." >&2
+            fi
             if [ "$http_code" = "503" ]; then
                 sleep $((RETRY_DELAY_503 * attempt))
             else

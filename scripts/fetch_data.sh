@@ -12,6 +12,7 @@ Y_RAW="$DATA_DIR/${TICKER_UPPER}_yahoo_raw.json"
 SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
 AV_INCOME="$DATA_DIR/${TICKER_UPPER}_av_income.json"
 AV_CASHFLOW="$DATA_DIR/${TICKER_UPPER}_av_cashflow.json"
+AV_BALANCE="$DATA_DIR/${TICKER_UPPER}_av_balance.json"
 COOKIE_FILE="$DATA_DIR/yahoo_cookie.txt"
 # Alpha Vantage key: agents/main/agent/auth-profiles.json, profile "alpha-vantage:default"
 OPENCLAW_ROOT="${OPENCLAW_HOME:-${HOME}/.openclaw}"
@@ -33,6 +34,18 @@ extract_sec_value() {
         if [ -n "$val" ] && [ "$val" != "null" ]; then echo "$val"; return 0; fi
     done
     echo "N/A"
+}
+
+# Extract two most recent values (for YoY or trend). Echo "PRIOR CURR" (older first) or "N/A N/A".
+extract_sec_two_latest() {
+    local file="$1" unit="${2:-USD}" tag="$3"
+    local arr
+    arr=$(jq -r ".facts.\"us-gaap\"[\"$tag\"].units[\"$unit\"] | sort_by(.end) | if length >= 2 then .[-2:] | map(.val) | join(\" \") else \"N/A N/A\" end" "$file" 2>/dev/null)
+    if [ -n "$arr" ] && [ "$arr" != "null" ] && [ "$arr" != "N/A N/A" ]; then
+        echo "$arr"
+    else
+        echo "N/A N/A"
+    fi
 }
 
 # ============================================
@@ -122,6 +135,8 @@ fi
 
 # Shares outstanding (proxy for dilution / buybacks)
 SHARES_OUT=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding.raw // .quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+SHARES_PRIOR="N/A"
+SHARES_YOY_PCT="N/A"
 
 # Fallback: gross margin from income statement if financialData missing (gross profit / revenue)
 if [[ "$GROSS_MARGIN" == "N/A" || -z "$GROSS_MARGIN" ]]; then
@@ -147,9 +162,16 @@ fi
 # Step 3: SEC Data (Final Precision)
 # ============================================
 if [ -z "$CIK" ] || [ "$CIK" = "null" ]; then
-    echo "🔍 Looking up SEC CIK directly..."
-    # Use SEC Agent here
-    CIK=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${TICKER_UPPER}&output=atom" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
+    echo "🔍 Looking up SEC CIK..."
+    # 1) Try SEC company_tickers.json (ticker -> CIK) for listed companies
+    SEC_TICKERS=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/files/company_tickers.json" 2>/dev/null)
+    if echo "$SEC_TICKERS" | jq -e '.' >/dev/null 2>&1; then
+        CIK=$(echo "$SEC_TICKERS" | jq -r --arg t "$TICKER_UPPER" '[.[] | select(.ticker == $t) | .cik_str] | first // empty' 2>/dev/null)
+    fi
+    # 2) Fallback: browse-edgar by ticker (atom)
+    if [ -z "$CIK" ]; then
+        CIK=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${TICKER_UPPER}&output=atom" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
+    fi
 fi
 
 REV="$CURR_REV"
@@ -168,6 +190,24 @@ if [ -n "$CIK" ]; then
                 SEC_NI=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
                 [ "$REV" = "N/A" ] && REV="$SEC_REV"
                 [ "$NI" = "N/A" ] && NI="$SEC_NI"
+            fi
+
+            # Share count trend: two latest SEC values for YoY (dilution vs buyback)
+            # Try multiple SEC concept names and units (companies use different XBRL tags)
+            SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "CommonStockSharesOutstanding")
+            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "pure" "CommonStockSharesOutstanding")
+            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "CommonStockSharesIssued")
+            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "WeightedAverageNumberOfSharesOutstandingBasic")
+            if [ "$SEC_SHARES_TWO" != "N/A N/A" ]; then
+                SHARES_PRIOR=$(echo "$SEC_SHARES_TWO" | awk '{print $1}')
+                SHARES_CURR_SEC=$(echo "$SEC_SHARES_TWO" | awk '{print $2}')
+                if [[ -n "$SHARES_PRIOR" && -n "$SHARES_CURR_SEC" && "$SHARES_PRIOR" != "0" && "$SHARES_PRIOR" != "N/A" ]]; then
+                    SHARES_YOY_PCT=$(echo "scale=2; ($SHARES_CURR_SEC - $SHARES_PRIOR) * 100 / $SHARES_PRIOR" | bc 2>/dev/null || echo "N/A")
+                    # Prefer SEC current when we have SEC trend so all three (outstanding, prior, yoy_pct) are from same source
+                    SHARES_OUT="$SHARES_CURR_SEC"
+                else
+                    SHARES_PRIOR="N/A"
+                fi
             fi
 
             # FCF fallback: operating cash flow minus capex
@@ -195,8 +235,8 @@ AV_KEY=""
 if [ -f "$AUTH_PROFILES" ]; then
     AV_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || true)
 fi
-if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" ) ]]; then
-    echo "🔍 Alpha Vantage fallback for FCF / quarterly revenue..."
+if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" || "$SHARES_PRIOR" = "N/A" ) ]]; then
+    echo "🔍 Alpha Vantage fallback for FCF / revenue_q_yoy / share count trend..."
     BASE_AV="https://www.alphavantage.co/query"
     if [ "$REV_Q_YOY" = "N/A" ]; then
         curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
@@ -226,7 +266,21 @@ if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" ) ]]; then
             fi
         fi
     fi
-    rm -f "$AV_INCOME" "$AV_CASHFLOW"
+    # Share count trend: quarterly balance sheet has commonStockSharesOutstanding
+    if [ "$SHARES_PRIOR" = "N/A" ]; then
+        curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
+        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_BALANCE" >/dev/null 2>&1; then
+            AV_SHARES_CURR=$(jq -r '.quarterlyReports[0].commonStockSharesOutstanding // empty' "$AV_BALANCE" 2>/dev/null)
+            AV_SHARES_PRIOR=$(jq -r '.quarterlyReports[4].commonStockSharesOutstanding // .quarterlyReports[1].commonStockSharesOutstanding // empty' "$AV_BALANCE" 2>/dev/null)
+            if [[ -n "$AV_SHARES_CURR" && -n "$AV_SHARES_PRIOR" && "$AV_SHARES_PRIOR" != "0" && "$AV_SHARES_PRIOR" != "None" ]]; then
+                SHARES_PRIOR="$AV_SHARES_PRIOR"
+                SHARES_YOY_PCT=$(echo "scale=2; ($AV_SHARES_CURR - $AV_SHARES_PRIOR) * 100 / $AV_SHARES_PRIOR" | bc 2>/dev/null || echo "N/A")
+                [ "$SHARES_OUT" = "N/A" ] && SHARES_OUT="$AV_SHARES_CURR"
+            fi
+        fi
+        sleep 2
+    fi
+    rm -f "$AV_INCOME" "$AV_CASHFLOW" "$AV_BALANCE"
 fi
 
 # ============================================
@@ -246,6 +300,8 @@ jq -n \
     --arg ni_q_yoy "$NI_Q_YOY" \
     --arg fcf "$FCF" \
     --arg shares_out "$SHARES_OUT" \
+    --arg shares_prior "$SHARES_PRIOR" \
+    --arg shares_yoy_pct "$SHARES_YOY_PCT" \
     --arg price "$PRICE" \
     --arg cap "$MCAP" \
     --arg roe "$ROE" \
@@ -271,7 +327,9 @@ jq -n \
             revenue_q_yoy: $rev_q_yoy,
             net_income_q_yoy: $ni_q_yoy,
             fcf: $fcf,
-            shares_outstanding: $shares_out
+            shares_outstanding: $shares_out,
+            shares_prior: $shares_prior,
+            shares_yoy_pct: $shares_yoy_pct
         },
         valuation: { current_price: $price, market_cap: $cap },
         momentum: { earnings_surprises: $surprise }

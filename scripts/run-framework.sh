@@ -34,7 +34,7 @@ PREVIOUS_CONTEXT="${SUMMARY_CONTEXT:-None}"
 # Max Token Guardrails
 declare -A MAX_TOKENS=(
     ["01-phase"]=2048 ["02-metrics"]=2048 ["03-ai-moat"]=1200 
-    ["04-strategic-moat"]=1200 ["05-sentiment"]=1000 ["06-growth"]=1200 
+    ["04-strategic-moat"]=2048 ["05-sentiment"]=1000 ["06-growth"]=1200 
     ["07-business"]=1200 ["08-risk"]=1200
 )
 
@@ -43,6 +43,10 @@ FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
 # 3. Data Segmenting (Surgical Injection)
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
+
+# Log start immediately so trace shows which step ran (and which step failed before first API log)
+init_trace
+log_trace "INFO" "$FW_ID" "Starting..."
 
 # Require data file so we never pass empty context (avoids "N/A / Insufficient data" when wrong ticker is used)
 if [ ! -f "$DATA_FILE" ]; then
@@ -94,9 +98,12 @@ check_context_not_empty() {
 }
 
 # 4. Initialization & Cache Check
-init_trace
 mkdir -p "$OUTPUT_DIR"
-CONTEXT=$(get_relevant_context)
+CONTEXT=$(get_relevant_context) || {
+    log_trace "ERROR" "$FW_ID" "get_relevant_context failed (jq or data file)"
+    echo "ERROR: Failed to load context from $DATA_FILE for $FW_ID." >&2
+    exit 1
+}
 check_context_not_empty "$CONTEXT"
 PROMPT_CONTENT=$(cat "$PROMPT_FILE")
 
