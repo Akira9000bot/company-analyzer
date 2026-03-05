@@ -4,17 +4,17 @@
 #
 
 # 1. Path Configuration
-# Prefer skill directory so cache lives under workspace/skills/company-analyzer/.cache/responses.
+# Prefer skill directory so cache lives under workspace/skills/company-analyzer/.cache/llm-responses.
 # Fall back to HOME if skill dir is read-only (e.g. system/npm install).
 CACHE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_SKILL_DIR="$(cd "$CACHE_LIB_DIR/../.." && pwd)"
 CACHE_ROOT="$CACHE_SKILL_DIR/.cache"
-CACHE_DIR="$CACHE_ROOT/responses"
+CACHE_DIR="$CACHE_ROOT/llm-responses"
 CACHE_TTL_DAYS=7
 mkdir -p "$CACHE_DIR" 2>/dev/null || true
 if [ ! -d "$CACHE_DIR" ] || [ ! -w "$CACHE_DIR" ]; then
     CACHE_ROOT="${HOME}/.openclaw/cache/company-analyzer"
-    CACHE_DIR="$CACHE_ROOT/responses"
+    CACHE_DIR="$CACHE_ROOT/llm-responses"
     mkdir -p "$CACHE_DIR" 2>/dev/null || true
 fi
 
@@ -113,14 +113,7 @@ cache_age() {
     echo "$age_days"
 }
 
-cache_cleanup() {
-    if [ -d "$CACHE_DIR" ]; then
-        # Automatically purge files older than TTL to save VPS disk space
-        find "$CACHE_DIR" -name "*.json" -type f -mtime +$CACHE_TTL_DAYS -delete 2>/dev/null
-    fi
-}
-
-# Export for use in run-framework.sh and analyze-parallel.sh
+# Export for use in run-framework.sh and analyze-pipeline.sh
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export -f init_cache cache_key cache_get cache_set cache_age cache_cleanup
+    export -f init_cache cache_key cache_get cache_set cache_age
 fi

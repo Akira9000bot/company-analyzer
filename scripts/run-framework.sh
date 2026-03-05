@@ -17,12 +17,13 @@ TICKER="${1:-}"
 FW_ID="${2:-}"
 PROMPT_FILE="${3:-}"
 OUTPUT_DIR="${4:-$SKILL_DIR/assets/outputs}"
-LIMIT_ARG="${5:-}"
+# No output token limit: use high default (8192) so API does not truncate; cost is low per costs.log
+LIMIT_ARG="${5:-8192}"
 
 # Usage guard: this script does NOT take --live (that flag is for analyze-pipeline.sh only)
 if [[ -z "$PROMPT_FILE" || "$PROMPT_FILE" == -* ]]; then
     echo "Usage: run-framework.sh <TICKER> <FW_ID> <PROMPT_FILE> [OUTPUT_DIR] [LIMIT]" >&2
-    echo "  Example (01-phase only): run-framework.sh KVYO 01-phase \"$SKILL_DIR/references/prompts/01-phase.txt\" \"$SKILL_DIR/assets/outputs\" 2048" >&2
+    echo "  Example (01-phase only): run-framework.sh KVYO 01-phase \"$SKILL_DIR/references/prompts/01-phase.txt\" \"$SKILL_DIR/assets/outputs\"" >&2
     echo "  Note: Do not pass --live. Use analyze-pipeline.sh <TICKER> --live for the full pipeline." >&2
     exit 1
 fi
@@ -31,14 +32,8 @@ fi
 # Inherit context from analyze-pipeline.sh
 PREVIOUS_CONTEXT="${SUMMARY_CONTEXT:-None}"
 
-# Max Token Guardrails
-declare -A MAX_TOKENS=(
-    ["01-phase"]=2048 ["02-metrics"]=4096 ["03-ai-moat"]=1200 
-    ["04-strategic-moat"]=2048 ["05-sentiment"]=2048 ["06-growth"]=2048 
-    ["07-business"]=1200 ["08-risk"]=2048
-)
-
-FW_MAX_TOKENS="${LIMIT_ARG:-${MAX_TOKENS[$FW_ID]:-800}}"
+# Single high cap so output is not truncated; per-framework limits removed (costs are low)
+FW_MAX_TOKENS="${LIMIT_ARG:-8192}"
 
 # 3. Data Segmenting (Surgical Injection)
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
@@ -199,10 +194,18 @@ if ! check_budget "$FW_ID"; then
     exit 1
 fi
 
-# 7. API Execution
+# 7. API Execution (no output token cap; FW_MAX_TOKENS=8192 so API does not truncate)
 API_RESPONSE=$(call_llm_api "$FULL_PROMPT" "$FW_MAX_TOKENS")
 CONTENT=$(extract_content "$API_RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$API_RESPONSE" "$FULL_PROMPT")"
+
+if ! validate_framework_output "$CONTENT"; then
+    read -r finish_reason out_tokens max_tokens <<< "$(extract_finish_info "$API_RESPONSE" "$FW_MAX_TOKENS" 2>/dev/null || echo "? ? ?")"
+    log_trace "TRUNC" "$FW_ID" "finishReason=$finish_reason outTokens=$out_tokens limit=$max_tokens"
+    echo "⚠️  $FW_ID output incomplete (finishReason=$finish_reason, ${out_tokens} tokens). Re-run step; response not cached." >&2
+    echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
+    exit 1
+fi
 
 # 8. Final Save & Metadata
 echo "$CONTENT" > "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
@@ -213,20 +216,6 @@ log_trace "INFO" "$FW_ID" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 append_to_rolling_context "$OUTPUT_DIR/${TICKER_UPPER}_${FW_ID}.md"
 
 # Cache only if output passed validation (do not cache truncated responses)
-if validate_framework_output "$CONTENT"; then
-    METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
-    cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
-    echo "✅ $FW_ID complete"
-else
-    # Diagnose why: finishReason + output token count vs limit (only for fresh API response)
-    read -r finish_reason out_tokens max_tokens <<< "$(extract_finish_info "$API_RESPONSE" "$FW_MAX_TOKENS" 2>/dev/null || echo "? ? ?")"
-    log_trace "TRUNC" "$FW_ID" "finishReason=$finish_reason outTokens=$out_tokens limit=$max_tokens"
-    if [ "$finish_reason" = "MAX_TOKENS" ]; then
-        echo "⚠️  $FW_ID truncated: hit token limit ($out_tokens/$max_tokens). Increase limit for this framework or shorten prompt." >&2
-    elif [ "$finish_reason" = "STOP" ] || [ "$finish_reason" = "END_TURN" ]; then
-        echo "⚠️  $FW_ID truncated: model stopped early (STOP, ${out_tokens} tokens). Prompt may need stronger 'must complete through Avoid:' instruction." >&2
-    else
-        echo "⚠️  $FW_ID output incomplete (finishReason=$finish_reason). Re-run step; response not cached." >&2
-    fi
-    exit 1
-fi
+METADATA=$(jq -n --arg i "$INPUT_TOKENS" --arg o "$OUTPUT_TOKENS" '{input: $i, output: $o}')
+cache_set "$CACHE_KEY" "$CONTENT" "$METADATA"
+echo "✅ $FW_ID complete"

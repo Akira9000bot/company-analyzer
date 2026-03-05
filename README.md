@@ -8,10 +8,10 @@ A high-performance, cost-optimized strategic research engine that analyzes publi
 
 The system follows a **Sequential Pipeline** model, ensuring that each analysis framework builds upon a consistent logical foundation while preventing API rate-limit bursts. 
 
-1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF), and **Alpha Vantage** (fallback for FCF and quarterly revenue YoY when Yahoo/SEC leave them N/A). Configure the Alpha Vantage profile in OpenClaw auth profiles to enable the fallback. *Future: optional investor-relations page discovery (e.g. from SEC filings) could supplement with IR-specific metrics.* 
+1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF, and share count trend), and **Alpha Vantage** (fallback for FCF, quarterly revenue YoY, and shares when Yahoo/SEC leave them N/A). Configure the Alpha Vantage profile in OpenClaw auth profiles to enable the fallback. 
 
 
-2. **Segmented Ingestion**: `run-framework.sh` dynamically parses SEC filings to send only the relevant segments (e.g., Item 1A for Risk, Item 1 for Business) to the LLM, reducing input costs by up to 90%. 
+2. **Segmented Ingestion**: `run-framework.sh` injects only the relevant context per framework from the enriched data file (e.g. profile + metrics for Phase, valuation + momentum for Risk), keeping prompts focused and costs down. 
 
 
 3. **The 8 Frameworks**:
@@ -49,13 +49,13 @@ The system follows a **Sequential Pipeline** model, ensuring that each analysis 
 * **Cost Efficiency**: Cost depends on your configured LLM and pricing; cost tracking uses `scripts/lib/prices.json` (keyed by model id). 
 
 
-* **Dynamic API Client**: Configuration-driven rate limiting (250+ RPM) with automatic model fallback and resilience retries. 
+* **Dynamic API Client**: Configuration-driven rate limiting (from OpenClaw config; default 250 RPM) and retries on transient API errors (e.g. 503). 
 
 
 * **Zero-Cost Synthesis**: Automatically compiles individual framework reports into a single, cohesive "Final Research Dossier" without additional LLM fees. 
 
 
-* **Persistent Caching**: Uses a caching layer under the skill (`.cache/responses/`); falls back to `~/.openclaw/cache/company-analyzer` if the skill directory is read-only. Metadata tracks tokens, model versions, and latency. 
+* **Persistent Caching**: Uses a caching layer under the skill (`.cache/llm-responses/`); falls back to `~/.openclaw/cache/company-analyzer/llm-responses/` if the skill directory is read-only. Metadata tracks tokens and model. 
 
 
 * **Audit Tools**: Includes `ticker-summary.sh` to monitor research spending and framework efficiency. 
@@ -81,21 +81,27 @@ chmod +x ~/.openclaw/workspace/skills/company-analyzer/scripts/*.sh
 
 ### Usage
 
-Run the full sequential pipeline for a specific ticker: 
+Run the full sequential pipeline for a ticker (from the skill directory):
 
 ```bash
-./scripts/analyze-pipeline.sh [TICKER] --live
+cd skills/company-analyzer && ./scripts/analyze-pipeline.sh [TICKER] --live
+```
 
+Run a single framework only (e.g. 01-phase or 02-metrics):
+
+```bash
+cd skills/company-analyzer && ./scripts/run-single-step.sh [TICKER] [FW_ID]
 ```
 
 ### Monitoring
 
-Generate a summary of all research costs and token usage: 
+Cost and token summary:
 
 ```bash
-./scripts/ticker-summary.sh
-
+cd skills/company-analyzer && ./scripts/ticker-summary.sh
 ```
+
+Trace logs (per ticker, per day) are in `assets/traces/<TICKER>_<YYYY-MM-DD>.trace` for debugging failed steps.
 
 ---
 
@@ -109,4 +115,4 @@ Generate a summary of all research costs and token usage:
 * **LLM provider**: The built-in API client uses a request/response format compatible with Google Generative AI–style APIs. The model and key are read from OpenClaw config; other providers with a compatible API (same URL shape and JSON format) can be used by configuring that provider in OpenClaw. 
 
 
-* **Global settings**: Rate limits and the default model are read from OpenClaw config. Add your model’s pricing to `scripts/lib/prices.json` (key = model id, e.g. `provider/model-id`) for cost tracking.
+* **Rate limits**: Read from OpenClaw config; default 250 RPM. Output token cap is a single high default (8192) so responses are not truncated.

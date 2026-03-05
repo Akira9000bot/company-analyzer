@@ -12,7 +12,7 @@ SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 PROMPTS_DIR="$SKILL_DIR/references/prompts"
 
-# Source libraries (cache.sh sets CACHE_DIR to $SKILL_DIR/.cache/responses)
+# Source libraries (cache.sh sets CACHE_DIR to $SKILL_DIR/.cache/llm-responses)
 source "$SCRIPT_DIR/lib/cache.sh"
 source "$SCRIPT_DIR/lib/cost-tracker.sh"
 source "$SCRIPT_DIR/lib/api-client.sh"
@@ -27,12 +27,6 @@ TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 
 # 3. Refined Sequence: Metrics & Business run BEFORE Moat
 FW_SEQUENCE=("01-phase" "02-metrics" "07-business" "03-ai-moat" "04-strategic-moat" "06-growth" "05-sentiment" "08-risk")
-
-declare -A LIMITS=(
-    ["01-phase"]="2048" ["02-metrics"]="4096" ["03-ai-moat"]="1200"
-    ["04-strategic-moat"]="2048" ["05-sentiment"]="2048" ["06-growth"]="2048"
-    ["07-business"]="1200" ["08-risk"]="2048"
-)
 
 # 4. Initialize
 init_trace
@@ -60,12 +54,11 @@ rm -f "$ROLLING_FILE"
 
 FAILED_STEPS=()
 for fw_id in "${FW_SEQUENCE[@]}"; do
-    LIMIT="${LIMITS[$fw_id]}"
     PROMPT_FILE="$PROMPTS_DIR/$fw_id.txt"
     
     echo "⏳ Step: $fw_id..."
     
-    if ! "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPT_FILE" "$OUTPUTS_DIR" "$LIMIT"; then
+    if ! "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPT_FILE" "$OUTPUTS_DIR"; then
         echo "❌ $fw_id failed (see error above). Continuing with remaining steps..."
         FAILED_STEPS+=("$fw_id")
         # Keep SUMMARY_CONTEXT from last successful step for subsequent steps

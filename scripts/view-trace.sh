@@ -91,18 +91,6 @@ else
 fi
 
 echo ""
-echo "📁 RAW DATA LOCATION:"
-echo "  $TRACE_DIR/raw/${TICKER_UPPER}_*.json"
-echo ""
-
-# Show latest raw files if they exist
-RAW_COUNT=$(ls "$TRACE_DIR/raw/${TICKER_UPPER}"_*.json 2>/dev/null | wc -l)
-if [ $RAW_COUNT -gt 0 ]; then
-    echo "  Available raw dumps: $RAW_COUNT files"
-    ls -la "$TRACE_DIR/raw/${TICKER_UPPER}"_*.json 2>/dev/null | head -5
-fi
-
-echo ""
 echo "======================================"
-echo "To view raw JSON: cat $TRACE_DIR/raw/${TICKER_UPPER}_<FW>_res.json"
+echo "Trace file: $TRACE_FILE"
 echo "======================================"

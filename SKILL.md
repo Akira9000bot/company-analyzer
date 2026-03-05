@@ -109,7 +109,7 @@ Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics
 - Re-run that step (or the full pipeline) to get a fresh response.
 
 ### Caching
-- Location: `skills/company-analyzer/.cache/responses/` (skill dir); falls back to `~/.openclaw/cache/company-analyzer/responses/` if skill dir is read-only
+- Location: `skills/company-analyzer/.cache/llm-responses/` (skill dir); falls back to `~/.openclaw/cache/company-analyzer/llm-responses/` if skill dir is read-only
 - TTL: 7 days
 - Key: `TICKER_FWID_PROMPT_HASH`
 - Cached responses show: `💰 framework: $0.0000 (cached)`

@@ -66,18 +66,6 @@ log_cost() {
     echo "  💰 $framework: \$$total_cost (Model: $active_model)"
 }
 
-# Usage: cost_summary
-cost_summary() {
-    [ ! -f "$COST_LOG" ] && { echo "No data."; return 0; }
-    
-    local today=$(date -u +%Y-%m-%d)
-    local spent=$(grep "^${today}T" "$COST_LOG" | grep -oE '\$[0-9.]+' | sed 's/\$//' | awk '{sum+=$1} END {printf "%.4f", sum}')
-    [ -z "$spent" ] && spent="0"
-    
-    echo "--- DAILY BUDGET TRACKER ---"
-    echo "  Today: \$$spent / \$$DAILY_BUDGET"
-}
-
 if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-    export -f init_cost_tracker log_cost cost_summary check_budget
+    export -f init_cost_tracker log_cost check_budget
 fi
