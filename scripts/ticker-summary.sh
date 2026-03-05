@@ -21,29 +21,26 @@ printf "%-10s | %-10s | %-12s | %-8s\n" "TICKER" "RUNS" "TOTAL TOKENS" "COST ($)
 echo "---------------------------------------------------------"
 
 # 2. Process Log Data
-# Aggregates Total Cost and Token Count per Ticker
+# Log format: timestamp | ticker | framework | model | 123i/456o | $cost
+# With -F' | ' we get: $1=ts $2=empty $3=ticker $4=empty $5=framework $6=empty $7=model $8=empty $9=tokens $10=empty $11=cost
 awk -F' | ' '
 {
-    ticker = $4;
-    # Extract tokens (format: 1234i/567o)
-    split($10, t, "/");
-    in_t = substr(t[1], 1, length(t[1])-1);
-    out_t = substr(t[2], 1, length(t[2])-1);
-    
-    # Extract cost (format: $0.001234)
-    cost_str = $12;
+    ticker = $3;
+    split($9, t, "/");
+    in_t = out_t = 0;
+    sub(/i$/, "", t[1]); in_t = t[1] + 0;
+    sub(/o$/, "", t[2]); out_t = t[2] + 0;
+    cost_str = $11;
     gsub(/\$/, "", cost_str);
-    
-    # Accumulate
     counts[ticker]++;
     tokens[ticker] += (in_t + out_t);
-    costs[ticker] += cost_str;
+    costs[ticker] += cost_str + 0;
 }
 END {
-    for (t in counts) {
-        printf "%-10s | %-10d | %-12d | $%-8.4f\n", t, counts[t], tokens[t], costs[t]
+    for (x in counts) {
+        printf "%-10s | %-10d | %-12d | $%-8.4f\n", x, counts[x], tokens[x], costs[x]
     }
-}' "$COST_LOG" | sort -rn -k 7
+}' "$COST_LOG" | sort -t'|' -k4 -rn
 
 echo "---------------------------------------------------------"
 
@@ -53,18 +50,17 @@ echo "🔍 Framework Efficiency (Average Cost per Call)"
 echo "---------------------------------------------------------"
 awk -F' | ' '
 {
-    fw = $6;
-    cost_str = $12;
+    fw = $5;
+    cost_str = $11;
     gsub(/\$/, "", cost_str);
-    
     fw_counts[fw]++;
-    fw_costs[fw] += cost_str;
+    fw_costs[fw] += cost_str + 0;
 }
 END {
     for (f in fw_counts) {
         avg = fw_costs[f] / fw_counts[f];
         printf "%-20s | Avg Cost: $%-8.6f | Runs: %d\n", f, avg, fw_counts[f]
     }
-}' "$COST_LOG" | sort -rn -k 4
+}' "$COST_LOG" | sort -t'|' -k4 -rn
 
 echo "========================================================="
