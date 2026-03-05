@@ -4,10 +4,19 @@
 #
 
 # 1. Path Configuration
-# Use Home directory to ensure full write permissions on restricted VPS hosts.
-CACHE_ROOT="${HOME}/.openclaw/cache/company-analyzer"
+# Prefer skill directory so cache lives under workspace/skills/company-analyzer/.cache/responses.
+# Fall back to HOME if skill dir is read-only (e.g. system/npm install).
+CACHE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_SKILL_DIR="$(cd "$CACHE_LIB_DIR/../.." && pwd)"
+CACHE_ROOT="$CACHE_SKILL_DIR/.cache"
 CACHE_DIR="$CACHE_ROOT/responses"
 CACHE_TTL_DAYS=7
+mkdir -p "$CACHE_DIR" 2>/dev/null || true
+if [ ! -d "$CACHE_DIR" ] || [ ! -w "$CACHE_DIR" ]; then
+    CACHE_ROOT="${HOME}/.openclaw/cache/company-analyzer"
+    CACHE_DIR="$CACHE_ROOT/responses"
+    mkdir -p "$CACHE_DIR" 2>/dev/null || true
+fi
 
 # Initialize cache directory structure
 init_cache() {

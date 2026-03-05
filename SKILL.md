@@ -102,7 +102,7 @@ Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics
 - **`lib/api-client.sh`** - Moonshot API with retry logic
 
 ### Caching
-- Location: `/.openclaw/cache/company-analyzer/responses/`
+- Location: `skills/company-analyzer/.cache/responses/` (skill dir); falls back to `~/.openclaw/cache/company-analyzer/responses/` if skill dir is read-only
 - TTL: 7 days
 - Key: `TICKER_FWID_PROMPT_HASH`
 - Cached responses show: `💰 framework: $0.0000 (cached)`

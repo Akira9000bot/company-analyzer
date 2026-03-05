@@ -9,22 +9,22 @@ LOGIC GATES & DEFINITIONS:
 * Moat Direction: Widening (Rising engagement, margin expansion, brand extending); Stable (Flat growth, margins, high retention but no new advantages); Narrowing or Shrinking (Losing market share, margin compression, commoditization).
 
 ---
-OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip RATING, PRIMARY SOURCE, or any of the three bullets.
+OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with the THREAT section. Keep each section concise (2-4 sentences max for PRIMARY SOURCE, EVIDENCE, ADVANTAGE, THREAT) so you can complete all five.
 
 RATING:
 Size: [None or Narrow or Wide]. Direction: [Widening or Stable or Narrowing].
 
 PRIMARY SOURCE:
-[Identify 1 to 2 dominant sources from: Network Effects, Switching Costs, Intangible Assets, Low-Cost Production, Counter-Positioning. List with brief justification.]
+[1-2 sources from: Network Effects, Switching Costs, Intangible Assets, Low-Cost Production, Counter-Positioning. One sentence each.]
 
 EVIDENCE:
-[2 hard data points (e.g., retention rates, margins vs peers) plus 1 quote proving the moat.]
+[2 hard data points plus 1 short quote. One sentence each.]
 
 ADVANTAGE:
-[Explanation of the structural advantage and why incumbents cannot easily copy or fight back.]
+[One or two sentences: structural advantage and why incumbents cannot easily copy.]
 
 THREAT:
-[Primary risk to moat durability, competitive landscape threats, or commoditization risks.]
+[One or two sentences: primary risk to moat durability.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (RATING:, PRIMARY SOURCE:, EVIDENCE:, ADVANTAGE:, THREAT:). Replace the bracketed placeholders with your analysis.
+NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Keep answers brief so you always complete all five sections; end with THREAT.

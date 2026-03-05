@@ -55,7 +55,7 @@ The system follows a **Sequential Pipeline** model, ensuring that each analysis 
 * **Zero-Cost Synthesis**: Automatically compiles individual framework reports into a single, cohesive "Final Research Dossier" without additional LLM fees. 
 
 
-* **Persistent Caching**: Uses a localized caching layer in `~/.openclaw/cache` with metadata tracking for tokens, model versions, and latency. 
+* **Persistent Caching**: Uses a caching layer under the skill (`.cache/responses/`); falls back to `~/.openclaw/cache/company-analyzer` if the skill directory is read-only. Metadata tracks tokens, model versions, and latency. 
 
 
 * **Audit Tools**: Includes `ticker-summary.sh` to monitor research spending and framework efficiency. 

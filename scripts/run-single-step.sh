@@ -14,7 +14,7 @@ OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 
 declare -A LIMITS=(
     ["01-phase"]="2048" ["02-metrics"]="2048" ["03-ai-moat"]="1200"
-    ["04-strategic-moat"]="1200" ["05-sentiment"]="1000" ["06-growth"]="1200"
+    ["04-strategic-moat"]="2048" ["05-sentiment"]="1000" ["06-growth"]="1200"
     ["07-business"]="1200" ["08-risk"]="1200"
 )
 

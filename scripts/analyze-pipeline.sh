@@ -11,9 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 PROMPTS_DIR="$SKILL_DIR/references/prompts"
-CACHE_DIR="${HOME}/.openclaw/cache/company-analyzer"
 
-# Source libraries
+# Source libraries (cache.sh sets CACHE_DIR to $SKILL_DIR/.cache/responses)
 source "$SCRIPT_DIR/lib/cache.sh"
 source "$SCRIPT_DIR/lib/cost-tracker.sh"
 source "$SCRIPT_DIR/lib/api-client.sh"
@@ -31,7 +30,7 @@ FW_SEQUENCE=("01-phase" "02-metrics" "07-business" "03-ai-moat" "04-strategic-mo
 
 declare -A LIMITS=(
     ["01-phase"]="2048" ["02-metrics"]="2048" ["03-ai-moat"]="1200"
-    ["04-strategic-moat"]="1200" ["05-sentiment"]="1000" ["06-growth"]="1200"
+    ["04-strategic-moat"]="2048" ["05-sentiment"]="1000" ["06-growth"]="1200"
     ["07-business"]="1200" ["08-risk"]="1200"
 )
 
