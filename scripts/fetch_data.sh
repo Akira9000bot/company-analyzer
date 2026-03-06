@@ -74,6 +74,10 @@ ROIC=$(jq -r '.quoteSummary.result[0].financialData.returnOnAssets.fmt // .quote
 
 PRICE=$(jq -r '.quoteResponse.result[0].regularMarketPrice // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
 MCAP=$(jq -r '.quoteResponse.result[0].marketCap // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
+# Analyst consensus 12-month target (Yahoo financialData) — used by synthesis for Price Target when present
+TARGET_MEAN=$(jq -r '.quoteSummary.result[0].financialData.targetMeanPrice.raw // .quoteSummary.result[0].financialData.targetMeanPrice.fmt // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+TARGET_HIGH=$(jq -r '.quoteSummary.result[0].financialData.targetHighPrice.raw // .quoteSummary.result[0].financialData.targetHighPrice.fmt // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+TARGET_LOW=$(jq -r '.quoteSummary.result[0].financialData.targetLowPrice.raw // .quoteSummary.result[0].financialData.targetLowPrice.fmt // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 SURPRISE=$(jq -c '.quoteSummary.result[0].earningsHistory.history | .[-4:] | map({date: .quarter.fmt, surprise: .surprisePercent.fmt})' "${Y_RAW}_summary" 2>/dev/null || echo "[]")
 CIK=$(jq -r '.quoteResponse.result[0].extra?.cik // empty' "${Y_RAW}_quote" 2>/dev/null || echo "")
 
@@ -305,6 +309,9 @@ jq -n \
     --arg shares_yoy_pct "$SHARES_YOY_PCT" \
     --arg price "$PRICE" \
     --arg cap "$MCAP" \
+    --arg target_mean "$TARGET_MEAN" \
+    --arg target_high "$TARGET_HIGH" \
+    --arg target_low "$TARGET_LOW" \
     --arg roe "$ROE" \
     --arg gross_margin "$GROSS_MARGIN" \
     --arg op_margin "$OP_MARGIN" \
@@ -332,7 +339,7 @@ jq -n \
             shares_prior: $shares_prior,
             shares_yoy_pct: $shares_yoy_pct
         },
-        valuation: { current_price: $price, market_cap: $cap },
+        valuation: { current_price: $price, market_cap: $cap, target_mean_price: $target_mean, target_high_price: $target_high, target_low_price: $target_low },
         momentum: { earnings_surprises: $surprise }
     }' > "$DATA_FILE"
 

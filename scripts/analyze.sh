@@ -91,6 +91,32 @@ if [ -f "$WEIGHTS_FILE" ]; then
 
 NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence; use when combining evidence and resolving conflicts): $WEIGHTS_LINE"
 fi
+# Inject reference date so synthesis uses current time for catalysts (avoids "Q4 2024" when we are in 2026)
+REFERENCE_DATE=$(date -u +%Y-%m-%d)
+REFERENCE_DATE_LINE="REFERENCE DATE: $REFERENCE_DATE. All VERDICT TRIGGERS (catalysts) must be expressed relative to this date—i.e. the next 2 quarters and upcoming earnings from today, not past quarters. Example: if today is March 2026, say 'Q1 2026' or 'upcoming Q1 2026 earnings,' not 'Q4 2024.'"
+
+# Inject current price and analyst target from data so synthesis can state a price target when supported
+PRICE_LINE=""
+if [ -f "$DATA_FILE" ]; then
+    CURRENT_PRICE=$(jq -r '.valuation.current_price // empty' "$DATA_FILE" 2>/dev/null)
+    TARGET_MEAN=$(jq -r '.valuation.target_mean_price // empty' "$DATA_FILE" 2>/dev/null)
+    if [ -n "$CURRENT_PRICE" ] && [ "$CURRENT_PRICE" != "null" ]; then
+        PRICE_FMT=$(printf "%.2f" "$CURRENT_PRICE" 2>/dev/null || echo "$CURRENT_PRICE")
+        PRICE_LINE="REFERENCE: Current price (from data): \$${PRICE_FMT}."
+        if [ -n "$TARGET_MEAN" ] && [ "$TARGET_MEAN" != "null" ] && [ "$TARGET_MEAN" != "N/A" ]; then
+            TARGET_FMT=$(printf "%.2f" "$TARGET_MEAN" 2>/dev/null || echo "$TARGET_MEAN")
+            PRICE_LINE="$PRICE_LINE Analyst consensus 12-month target (from data): \$${TARGET_FMT}. Use this as the base fair value when stating Price Target or when applying a fair-value penalty (e.g. show adjusted target from this base); if no target in data, output N/A."
+        else
+            PRICE_LINE="$PRICE_LINE Use framework analyses to state a 12-month price target only if explicitly supported; otherwise N/A."
+        fi
+    fi
+fi
+SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+
+$REFERENCE_DATE_LINE"
+[ -n "$PRICE_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+
+$PRICE_LINE"
 FULL_SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 === 8 FRAMEWORK ANALYSES ===
