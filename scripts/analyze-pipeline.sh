@@ -40,6 +40,19 @@ if [ "$LIVE" != "--live" ]; then
 fi
 
 # ============================================
+# Phase 0: Ensure data file exists (fetch if missing)
+# ============================================
+DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
+if [ ! -f "$DATA_FILE" ]; then
+    log_trace "INFO" "data" "Data file not found; fetching..."
+    echo "📊 Data file not found; fetching for $TICKER_UPPER..."
+    "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" || { echo "ERROR: fetch_data.sh failed for $TICKER_UPPER" >&2; exit 1; }
+else
+    log_trace "INFO" "data" "Data file exists."
+fi
+[ ! -f "$DATA_FILE" ] && { echo "ERROR: No data file after fetch: $DATA_FILE" >&2; exit 1; }
+
+# ============================================
 # Phase 1: Sequential Execution
 # ============================================
 echo "🚀 Starting Momentum Pipeline for $TICKER_UPPER..."
@@ -74,21 +87,48 @@ for fw_id in "${FW_SEQUENCE[@]}"; do
 done
 
 # ============================================
-# Phase 2: Local Report Concatenation
+# Phase 2: Local Report Concatenation (sections ordered by weight when references/framework-weights.json exists)
 # ============================================
 echo "🧪 Compiling Final Research Dossier..."
 SYNTH_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_FINAL_REPORT.md"
+WEIGHTS_FILE="$SKILL_DIR/references/framework-weights.json"
+
+# Build report order: weight-descending from config, then any framework not in config (so all 8 can appear even if weights file is incomplete)
+REPORT_ORDER=()
+if [ -f "$WEIGHTS_FILE" ]; then
+    while IFS= read -r id; do
+        [ -n "$id" ] && REPORT_ORDER+=("$id")
+    done < <(jq -r 'to_entries | sort_by(-.value) | .[].key' "$WEIGHTS_FILE" 2>/dev/null || true)
+fi
+for id in "${FW_SEQUENCE[@]}"; do
+    if [[ " ${REPORT_ORDER[*]} " != *" $id "* ]]; then
+        REPORT_ORDER+=("$id")
+    fi
+done
+[ ${#REPORT_ORDER[@]} -eq 0 ] && REPORT_ORDER=("${FW_SEQUENCE[@]}")
 
 {
     echo "# Strategic Research Dossier: $TICKER_UPPER"
     echo "Analysis Date: $(date)"
     echo "Model: $(jq -r '.agents.defaults.model.primary // "LLM"' "${CONFIG_FILE:-$HOME/.openclaw/openclaw.json}" 2>/dev/null | awk -F'/' '{print $NF}' || echo "LLM")"
+    echo ""
+    if [ -f "$WEIGHTS_FILE" ]; then
+        WEIGHTS_SUMMARY=$(jq -r 'to_entries | sort_by(-.value) | map("\(.key): \(.value * 100 | floor)%") | join(", ")' "$WEIGHTS_FILE" 2>/dev/null || true)
+        [ -n "$WEIGHTS_SUMMARY" ] && echo "**Framework weights:** $WEIGHTS_SUMMARY"
+    else
+        echo "**Framework emphasis:** Phase (01), Key Metrics (02), Risk (08), and AI Moat (03) are weighted most heavily; others provide supporting context."
+    fi
     echo "---"
-    for fw_id in "${FW_SEQUENCE[@]}"; do
+    for fw_id in "${REPORT_ORDER[@]}"; do
         FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
         if [ -f "$FW_FILE" ]; then
             HEADER=$(echo "$fw_id" | cut -d'-' -f2- | tr '[:lower:]' '[:upper:]')
-            echo "## $HEADER"
+            if [ -f "$WEIGHTS_FILE" ]; then
+                PCT=$(jq -r --arg k "$fw_id" '.[$k] // empty | (. * 100 | floor | tostring) + "%"' "$WEIGHTS_FILE" 2>/dev/null || echo "")
+                [ -n "$PCT" ] && echo "## $HEADER ($PCT)" || echo "## $HEADER"
+            else
+                echo "## $HEADER"
+            fi
             cat "$FW_FILE"
             echo -e "\n---\n"
         fi

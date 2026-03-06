@@ -22,7 +22,7 @@ echo "---------------------------------------------------------"
 
 # 2. Process Log Data
 # Log format: timestamp | ticker | framework | model | 123i/456o | $cost
-# With -F' | ' (space OR space in awk regex) we split on space: $3=ticker $5=framework $9=tokens $11=cost
+# With -F' | ' awk splits on space OR pipe: $1=ts $3=ticker $5=framework $9=tokens $11=cost
 awk -F' | ' '
 {
     ticker = $3;

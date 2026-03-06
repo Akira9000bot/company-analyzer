@@ -35,8 +35,13 @@ check_budget() {
 log_cost() {
     local ticker="$1"
     local framework="$2"
+    # Use first token only if caller accidentally passes multiple words (e.g. from malformed extract_usage)
     local INPUT_TOKENS="${3:-0}"
     local OUTPUT_TOKENS="${4:-0}"
+    INPUT_TOKENS="${INPUT_TOKENS%% *}"
+    OUTPUT_TOKENS="${OUTPUT_TOKENS%% *}"
+    [[ -z "$INPUT_TOKENS" || ! "$INPUT_TOKENS" =~ ^[0-9]+$ ]] && INPUT_TOKENS="0"
+    [[ -z "$OUTPUT_TOKENS" || ! "$OUTPUT_TOKENS" =~ ^[0-9]+$ ]] && OUTPUT_TOKENS="0"
 
     init_cost_tracker
 
