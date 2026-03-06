@@ -29,11 +29,14 @@
 - [x] Monitor Gemini 3 Flash TPM levels after heartbeat isolation. (Fixed: Daily resets + isolated heartbeats stabilized TPM; see 2026-03-04 log).
 - [ ] Resume job search automation/research.
 - [ ] Update `company-analyzer` scripts to be path-agnostic.
-- [ ] Commit 5 days of pending memory files (Mar 1-5).
-- [ ] Resolve uncommitted changes in `skills/company-analyzer`.
+- [x] Commit 5 days of pending memory files (Mar 1-5).
+- [x] Resolve uncommitted changes in `skills/company-analyzer`.
+- [ ] Investigate and fix `analyze-pipeline.sh` syntax error at line 76.
+- [ ] Monitor Gemini 3 Flash stability (00:00-03:00 UTC window).
 
 
 ## Investment Research (Feb-Mar 2026)
 - **KVYO (Klaviyo):** Phase 3 (Self-Funding). High Conviction. Moat: Usage-based pricing (AI contraction hedge).
 - **Gemini 503 Instability (2026-03-05):** Gemini 3 Flash exhibits persistent 503 errors during 00:00-03:00 UTC, specifically impacting the `02-metrics` framework.
+- **Analysis Progress:** Completed AMPX, TXN, and DDOG.
 - Company analysis findings are stored in local skill assets (see Privacy Protocol).
