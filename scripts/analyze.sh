@@ -35,21 +35,23 @@ echo "======================================"
 
 mkdir -p "$OUTPUTS_DIR"
 
-# 1. Fetch Data
-if [ ! -f "$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json" ]; then
+# 1. Fetch Data (same path as pipeline; fail if fetch does not produce file)
+DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
+if [ ! -f "$DATA_FILE" ]; then
     echo "📊 Fetching data..."
-    "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" > /dev/null 2>&1
+    "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" || { echo "ERROR: fetch_data.sh failed for $TICKER_UPPER" >&2; exit 1; }
 fi
+[ ! -f "$DATA_FILE" ] && { echo "ERROR: No data file after fetch: $DATA_FILE" >&2; exit 1; }
 
-# 2. Run 8 Frameworks
+# 2. Run 8 Frameworks (same order as analyze-pipeline.sh for consistent context hand-off)
+FW_SEQUENCE=(01-phase 02-metrics 07-business 03-ai-moat 04-strategic-moat 06-growth 05-sentiment 08-risk)
 echo "📋 Phase 1: Analyzing 8 Frameworks..."
 ROLLING_CONTEXT_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_rolling_context.txt"
-# Clear from previous run
-rm -f "$ROLLING_CONTEXT_FILE" 
+rm -f "$ROLLING_CONTEXT_FILE"
 
 export SUMMARY_CONTEXT="None"
 
-for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
+for fw_id in "${FW_SEQUENCE[@]}"; do
     echo -n "  🔄 $fw_id... "
     "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPTS_DIR/$fw_id.txt" "$OUTPUTS_DIR" > /dev/null
     
@@ -65,28 +67,51 @@ done
 echo ""
 echo "🧠 Phase 2: Strategic Synthesis..."
 
-# Aggregate all framework outputs
+# Aggregate all framework outputs (same order as execution; use real newlines so LLM sees structured prompt)
 ALL_OUTPUTS=""
-for fw_id in 01-phase 02-metrics 03-ai-moat 04-strategic-moat 05-sentiment 06-growth 07-business 08-risk; do
+for fw_id in "${FW_SEQUENCE[@]}"; do
     FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
     if [ -f "$FW_FILE" ]; then
-        ALL_OUTPUTS="${ALL_OUTPUTS}### $fw_id ###\n$(cat "$FW_FILE")\n\n"
+        ALL_OUTPUTS="${ALL_OUTPUTS}
+### $fw_id ###
+$(cat "$FW_FILE")
+
+"
     fi
 done
 
-SYNTHESIS_PROMPT=$(cat "$PROMPTS_DIR/09-synthesis.txt" 2>/dev/null)
+SYNTH_FILE_PROMPT="$PROMPTS_DIR/09-synthesis.txt"
+[ ! -f "$SYNTH_FILE_PROMPT" ] && { echo "ERROR: Synthesis prompt not found: $SYNTH_FILE_PROMPT" >&2; exit 1; }
+SYNTHESIS_PROMPT=$(cat "$SYNTH_FILE_PROMPT")
+# Inject numeric framework weights from config so synthesis can weigh evidence (adjust references/framework-weights.json to change)
+WEIGHTS_FILE="$(dirname "$PROMPTS_DIR")/framework-weights.json"
+if [ -f "$WEIGHTS_FILE" ]; then
+    WEIGHTS_LINE=$(jq -r 'to_entries | map("\(.key)=\(.value * 100 | floor)%") | join(", ")' "$WEIGHTS_FILE" 2>/dev/null || true)
+    [ -n "$WEIGHTS_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+
+NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence; use when combining evidence and resolving conflicts): $WEIGHTS_LINE"
+fi
 FULL_SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 === 8 FRAMEWORK ANALYSES ===
 $ALL_OUTPUTS"
 
-# Call API for synthesis
-RESPONSE=$(call_llm_api "$FULL_SYNTHESIS_PROMPT" 2000)
+# Require at least one framework output so synthesis has content (avoid calling API with empty analyses)
+FW_COUNT=$(for fw_id in "${FW_SEQUENCE[@]}"; do [ -f "$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md" ] && echo 1; done | wc -l)
+[ "${FW_COUNT:-0}" -eq 0 ] && { echo "ERROR: No framework outputs found; run frameworks first. Expected at least one of: ${OUTPUTS_DIR}/${TICKER_UPPER}_*.md" >&2; exit 1; }
+
+# Call API for synthesis (use same high limit as frameworks to avoid truncating verdict)
+RESPONSE=$(call_llm_api "$FULL_SYNTHESIS_PROMPT" 8192)
 CONTENT=$(extract_content "$RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$RESPONSE" "$FULL_SYNTHESIS_PROMPT")"
 
-# Save results
-echo "$CONTENT" > "$OUTPUTS_DIR/${TICKER_UPPER}_synthesis.md"
+# Guard: API can return 200 with empty candidates (e.g. safety block); avoid overwriting with empty file
+if [ -z "${CONTENT//[[:space:]]/}" ]; then
+    echo "ERROR: Synthesis API returned no content (empty or blocked response). Check API response or try again." >&2
+    exit 1
+fi
+
+# Save results (single final report only)
 echo "$CONTENT" > "$OUTPUTS_DIR/${TICKER_UPPER}_FINAL_REPORT.md"
 
 # Log synthesis cost

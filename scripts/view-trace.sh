@@ -18,7 +18,9 @@ if [ -z "$TICKER" ]; then
 fi
 
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
-TRACE_DIR="$(dirname "$(dirname "$0")")/assets/traces"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+TRACE_DIR="$SKILL_DIR/assets/traces"
 TRACE_FILE="$TRACE_DIR/${TICKER_UPPER}_${DATE}.trace"
 
 if [ ! -f "$TRACE_FILE" ]; then
@@ -46,9 +48,9 @@ echo ""
 echo "📈 PERFORMANCE SUMMARY:"
 echo ""
 
-# Count cache hits vs API calls
+# Count cache hits vs API calls (trace format: [timestamp] LEVEL | COMPONENT | MESSAGE)
 CACHE_HITS=$(grep -c "Cache HIT" "$TRACE_FILE" 2>/dev/null || echo "0")
-API_CALLS=$(grep -c "SUCCESS | Latency" "$TRACE_FILE" 2>/dev/null || echo "0")
+API_CALLS=$(grep -c "Complete |" "$TRACE_FILE" 2>/dev/null || echo "0")
 TOTAL=$((CACHE_HITS + API_CALLS))
 
 if [ $TOTAL -gt 0 ]; then
