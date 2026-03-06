@@ -12,7 +12,7 @@
 
 | Use | Script / behavior |
 |-----|--------------------|
-| **Synthesis verdict** | `analyze.sh` injects a line like `NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence; ...): 01-phase=20%, 02-metrics=20%, ...` into the 09-synthesis prompt. The LLM uses these percentages to weight each framework when forming BUY/HOLD/SELL. |
+| **Synthesis verdict** | `analyze.sh` injects a line like `NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence; ...): 01-phase=20%, 02-metrics=20%, ...` into the 09-synthesis prompt. The LLM uses these percentages to compute the weighted base score for the 5-tier verdict (STRONG BUY, BUY, HOLD, SELL, STRONG SELL). |
 | **Final report order and labels** | `analyze-pipeline.sh` orders report sections by weight (highest first) and adds the weight to each section header (e.g. `## PHASE (20%)`). The report header also lists all weights. |
 
 Changing `framework-weights.json` is enough to change both synthesis behavior and report ordering; no edits to prompt text are required.
