@@ -31,15 +31,22 @@ Calculate a weighted composite score (0-100) based on the 8 core frameworks (01-
 0 to 29 (STRONG SELL): Existential threat. The business model is fundamentally breaking.
 (Boundaries are inclusive: e.g. 85 = STRONG BUY, 84 = BUY. Always use the floor (round down) for fractional scores before applying bands.)
 
-STEP 2: Apply the "Valuation Circuit Breaker" (Upside Risk)
-A high fundamental score alone cannot trigger a maximum conviction rating. You must override the base score if the price is wrong.
+STEP 2: Apply the "Valuation Circuit Breaker" (Momentum-Adjusted)
+A high fundamental score alone cannot trigger a maximum conviction rating. You must still check whether the current price is too far above a realistic anchor, but you MUST use momentum-adjusted anchors instead of a stale mean target.
 
-The Rule: If the Base Score triggers a STRONG BUY, BUY, or HOLD, you must check the "Sentiment/Valuation" metric (from 05-sentiment framework).
+The Rule: If the Base Score triggers a STRONG BUY, BUY, or HOLD, check valuation using the strongest primary anchor from the injected REFERENCE data or 05-sentiment output. Primary anchors are `internal_guidance_target` and `analyst_high_target`. Treat `analyst_mean_target` / consensus mean as secondary and lagging context only.
 
-The Action: If the Valuation is flagged as "Expensive" or "Overvalued" (05-sentiment outputs Cheap / Fair / Expensive—treat Expensive as triggering this), you must automatically downgrade the verdict by one full tier (e.g., STRONG BUY becomes BUY; BUY becomes HOLD; HOLD becomes SELL).
+The Action:
+- If price is <=10% above the strongest primary anchor, treat valuation as `Fair` and do NOT downgrade.
+- If price is >20% above the strongest primary anchor BUT there is no Narrative Flip and margins are expanding (or valuation context explicitly says breakout momentum), do NOT apply a full-tier downgrade. Keep the existing 5-tier verdict and note the caution in ADJUSTMENTS.
+- Only apply a full-tier downgrade to SELL/HOLD/BUY when price is >30% above the strongest primary anchor AND margins are not expanding.
 
-Requirement: A STRONG BUY verdict can only be issued if the Valuation is explicitly "Fair" or "Cheap."
-(If 05-sentiment does not state Valuation, or states something other than Cheap/Fair/Expensive: treat as Fair for Step 2—do not block STRONG BUY, but do not assume Cheap.)
+Institutional Confirmation Override:
+- Check the injected institutional ownership data and sentiment output. If institutional ownership is strong / supportive during a breakout, do NOT treat a simple premium to the lagging mean target as enough reason to downgrade by itself.
+- If a forward P/E or guidance-based multiple is provided and it exceeds the sector ceiling (e.g. ~100x for AI infrastructure), you may still treat valuation as stretched.
+
+Requirement: A STRONG BUY verdict can only be issued if valuation is effectively `Fair` or `Cheap` on the strongest primary anchor.
+(If 05-sentiment does not state Valuation, or states something other than Cheap/Fair/Expensive: infer from the strongest primary anchor in the REFERENCE data. If no primary anchor is available, treat valuation as Fair.)
 
 STEP 3: Apply the "Structural Veto" (Downside Risk)
 Structural risks must accelerate the downside rating to protect capital from value traps.
@@ -68,7 +75,7 @@ MANDATORY SCREENING CRITERIA (apply before finalizing verdict):
 OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip VERDICT, VERDICT TRIGGERS, WEIGHTED SCORECARD, NARRATIVE FLIP RADAR, STRUCTURAL FLAGS, KEY RISKS, or INVESTMENT THESIS.
 
 VERDICT:
-[Exactly one of: STRONG BUY | BUY | HOLD | SELL | STRONG SELL]. Base Score: [0-100]. Price Target: [If a "Analyst consensus 12-month target (from data)" or other base fair value appears in the REFERENCE line below, use it: state that target (or a range). If applying a fair-value penalty (e.g., -20% SaaS) AND that base is provided, show the math: "Price Target: $X (Adjusted from $Y base fair value via -20% penalty)." If NO base fair value or target is provided in the data, DO NOT hallucinate a dollar figure; output "Price Target: N/A" and if a penalty applies add "(Applies -20% Structural SaaS Penalty to intrinsic value)."]
+[Exactly one of: STRONG BUY | BUY | HOLD | SELL | STRONG SELL]. Base Score: [0-100]. Price Target: [Use the strongest primary anchor from the REFERENCE data: prefer `internal_guidance_target`, otherwise `analyst_high_target`, then other explicit fair-value anchors. Treat `analyst_mean_target` as secondary / lagging context only. If applying a fair-value penalty (e.g., -20% SaaS) AND a base anchor is provided, show the math: "Price Target: $X (Adjusted from $Y base fair value via -20% penalty)." If NO base fair value or target is provided in the data, DO NOT hallucinate a dollar figure; output "Price Target: N/A" and if a penalty applies add "(Applies -20% Structural SaaS Penalty to intrinsic value)."]
 
 [Then append only the single action definition that matches your verdict:]
 - STRONG BUY: Deploy capital immediately. Increase position sizing. Wide margin of safety.
@@ -121,4 +128,4 @@ RULES: Be decisive. Output exactly one of STRONG BUY, BUY, HOLD, SELL, or STRONG
 3. Apply Step 2 (Valuation Circuit Breaker) if the current tier is STRONG BUY, BUY, or HOLD.
 4. Apply Step 3 (Structural Veto) as the final overriding cap.
 
-Append the action definition for your chosen tier. NEVER invent or hallucinate a dollar amount for the Price Target; if the data does not provide one, output N/A. For Phase 5 (Legacy/Capital Return) companies with high dividend yield (e.g. ≥5–6%) and "Cheap" valuation, consider upgrading a base HOLD to BUY and state the Value/Dividend upgrade in ADJUSTMENTS. Always output VERDICT TRIGGERS using the tier-specific catalyst format: STRONG BUY = victory condition to monitor (next 2 quarters); BUY = barrier to upgrade to STRONG BUY; HOLD = trigger to upgrade and trigger to downgrade; SELL = trigger to upgrade plus catalyst for total liquidation (downgrade to STRONG SELL); STRONG SELL = catalyst for re-evaluation (what would take the stock off the blacklist). If evidence is mixed, default to HOLD. NO intro paragraph. NO citations. Use only the exact section headers requested.
+Append the action definition for your chosen tier. NEVER invent or hallucinate a dollar amount for the Price Target; if the data does not provide one, output N/A. Use `internal_guidance_target` and `analyst_high_target` as primary valuation anchors; `analyst_mean_target` is lagging context only. Because the verdict system is fixed to 5 tiers, do NOT invent half-tiers like "Weak BUY"; if valuation is somewhat stretched but not enough for a full downgrade, keep the existing tier and explain the caution in ADJUSTMENTS. For Phase 5 (Legacy/Capital Return) companies with high dividend yield (e.g. ≥5–6%) and "Cheap" valuation, consider upgrading a base HOLD to BUY and state the Value/Dividend upgrade in ADJUSTMENTS. Always output VERDICT TRIGGERS using the tier-specific catalyst format: STRONG BUY = victory condition to monitor (next 2 quarters); BUY = barrier to upgrade to STRONG BUY; HOLD = trigger to upgrade and trigger to downgrade; SELL = trigger to upgrade plus catalyst for total liquidation (downgrade to STRONG SELL); STRONG SELL = catalyst for re-evaluation (what would take the stock off the blacklist). If evidence is mixed, default to HOLD. NO intro paragraph. NO citations. Use only the exact section headers requested.
