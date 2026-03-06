@@ -23,6 +23,7 @@ PROMPTS_DIR="$SKILL_DIR/references/prompts"
 # Load shared libraries
 source "$SCRIPT_DIR/lib/api-client.sh"
 source "$SCRIPT_DIR/lib/cost-tracker.sh"
+source "$SCRIPT_DIR/lib/trace.sh"
 
 if [ "$LIVE" != "--live" ]; then
     echo "DRY RUN MODE: ./analyze.sh $TICKER_UPPER --live to execute"
@@ -34,6 +35,7 @@ echo "  LIVE ANALYSIS: $TICKER_UPPER"
 echo "======================================"
 
 mkdir -p "$OUTPUTS_DIR"
+init_trace
 
 # 1. Fetch Data (same path as pipeline; fail if fetch does not produce file)
 DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
@@ -95,20 +97,60 @@ fi
 REFERENCE_DATE=$(date -u +%Y-%m-%d)
 REFERENCE_DATE_LINE="REFERENCE DATE: $REFERENCE_DATE. All VERDICT TRIGGERS (catalysts) must be expressed relative to this date—i.e. the next 2 quarters and upcoming earnings from today, not past quarters. Example: if today is March 2026, say 'Q1 2026' or 'upcoming Q1 2026 earnings,' not 'Q4 2024.'"
 
-# Inject current price and analyst target from data so synthesis can state a price target when supported
+# Inject valuation anchors from data so synthesis uses current guidance/high target, not a lagging mean target
 PRICE_LINE=""
 if [ -f "$DATA_FILE" ]; then
     CURRENT_PRICE=$(jq -r '.valuation.current_price // empty' "$DATA_FILE" 2>/dev/null)
-    TARGET_MEAN=$(jq -r '.valuation.target_mean_price // empty' "$DATA_FILE" 2>/dev/null)
+    TARGET_MEAN=$(jq -r '.valuation.analyst_mean_target // .valuation.target_mean_price // empty' "$DATA_FILE" 2>/dev/null)
+    TARGET_HIGH=$(jq -r '.valuation.analyst_high_target // .valuation.target_high_price // empty' "$DATA_FILE" 2>/dev/null)
+    INTERNAL_GUIDANCE_TARGET=$(jq -r '.valuation.internal_guidance_target // empty' "$DATA_FILE" 2>/dev/null)
+    VALUATION_CONTEXT=$(jq -r '.valuation.valuation_context // empty' "$DATA_FILE" 2>/dev/null)
+    GUIDANCE_EPS=$(jq -r '.valuation.guidance_eps // empty' "$DATA_FILE" 2>/dev/null)
+    GUIDANCE_MULTIPLE=$(jq -r '.valuation.guidance_growth_multiple // empty' "$DATA_FILE" 2>/dev/null)
+    GUIDANCE_FORWARD_PE=$(jq -r '.valuation.guidance_forward_pe // empty' "$DATA_FILE" 2>/dev/null)
+    INST_OWNERSHIP=$(jq -r '.valuation.institutional_ownership_pct // empty' "$DATA_FILE" 2>/dev/null)
+    INST_COUNT=$(jq -r '.valuation.institutions_count // empty' "$DATA_FILE" 2>/dev/null)
+    PRIMARY_ANCHOR=$(jq -r '.valuation.primary_valuation_anchor // empty' "$DATA_FILE" 2>/dev/null)
+    PRIMARY_ANCHOR_SOURCE=$(jq -r '.valuation.primary_valuation_anchor_source // empty' "$DATA_FILE" 2>/dev/null)
     if [ -n "$CURRENT_PRICE" ] && [ "$CURRENT_PRICE" != "null" ]; then
         PRICE_FMT=$(printf "%.2f" "$CURRENT_PRICE" 2>/dev/null || echo "$CURRENT_PRICE")
         PRICE_LINE="REFERENCE: Current price (from data): \$${PRICE_FMT}."
         if [ -n "$TARGET_MEAN" ] && [ "$TARGET_MEAN" != "null" ] && [ "$TARGET_MEAN" != "N/A" ]; then
             TARGET_FMT=$(printf "%.2f" "$TARGET_MEAN" 2>/dev/null || echo "$TARGET_MEAN")
-            PRICE_LINE="$PRICE_LINE Analyst consensus 12-month target (from data): \$${TARGET_FMT}. Use this as the base fair value when stating Price Target or when applying a fair-value penalty (e.g. show adjusted target from this base); if no target in data, output N/A."
-        else
-            PRICE_LINE="$PRICE_LINE Use framework analyses to state a 12-month price target only if explicitly supported; otherwise N/A."
+            PRICE_LINE="$PRICE_LINE Analyst mean target (lagging consensus): \$${TARGET_FMT}."
         fi
+        if [ -n "$TARGET_HIGH" ] && [ "$TARGET_HIGH" != "null" ] && [ "$TARGET_HIGH" != "N/A" ]; then
+            TARGET_HIGH_FMT=$(printf "%.2f" "$TARGET_HIGH" 2>/dev/null || echo "$TARGET_HIGH")
+            PRICE_LINE="$PRICE_LINE Analyst high target (primary anchor): \$${TARGET_HIGH_FMT}."
+        fi
+        if [ -n "$INTERNAL_GUIDANCE_TARGET" ] && [ "$INTERNAL_GUIDANCE_TARGET" != "null" ] && [ "$INTERNAL_GUIDANCE_TARGET" != "N/A" ]; then
+            INTERNAL_FMT=$(printf "%.2f" "$INTERNAL_GUIDANCE_TARGET" 2>/dev/null || echo "$INTERNAL_GUIDANCE_TARGET")
+            PRICE_LINE="$PRICE_LINE Internal guidance target (primary anchor): \$${INTERNAL_FMT}"
+            if [ -n "$GUIDANCE_EPS" ] && [ "$GUIDANCE_EPS" != "null" ] && [ "$GUIDANCE_EPS" != "N/A" ] && [ -n "$GUIDANCE_MULTIPLE" ] && [ "$GUIDANCE_MULTIPLE" != "null" ] && [ "$GUIDANCE_MULTIPLE" != "N/A" ]; then
+                PRICE_LINE="$PRICE_LINE from guidance EPS ${GUIDANCE_EPS} x ${GUIDANCE_MULTIPLE}x."
+            else
+                PRICE_LINE="$PRICE_LINE."
+            fi
+        fi
+        if [ -n "$PRIMARY_ANCHOR" ] && [ "$PRIMARY_ANCHOR" != "null" ] && [ "$PRIMARY_ANCHOR" != "N/A" ] && [ -n "$PRIMARY_ANCHOR_SOURCE" ] && [ "$PRIMARY_ANCHOR_SOURCE" != "null" ] && [ "$PRIMARY_ANCHOR_SOURCE" != "N/A" ]; then
+            PRIMARY_FMT=$(printf "%.2f" "$PRIMARY_ANCHOR" 2>/dev/null || echo "$PRIMARY_ANCHOR")
+            PRICE_LINE="$PRICE_LINE Strongest primary valuation anchor: \$${PRIMARY_FMT} (${PRIMARY_ANCHOR_SOURCE})."
+        fi
+        if [ -n "$VALUATION_CONTEXT" ] && [ "$VALUATION_CONTEXT" != "null" ]; then
+            PRICE_LINE="$PRICE_LINE Valuation context: ${VALUATION_CONTEXT}."
+        fi
+        if [ -n "$GUIDANCE_FORWARD_PE" ] && [ "$GUIDANCE_FORWARD_PE" != "null" ] && [ "$GUIDANCE_FORWARD_PE" != "N/A" ]; then
+            PRICE_LINE="$PRICE_LINE Guidance-based forward P/E: ${GUIDANCE_FORWARD_PE}x."
+        fi
+        if [ -n "$INST_OWNERSHIP" ] && [ "$INST_OWNERSHIP" != "null" ] && [ "$INST_OWNERSHIP" != "N/A" ]; then
+            PRICE_LINE="$PRICE_LINE Institutional ownership: ${INST_OWNERSHIP}"
+            if [ -n "$INST_COUNT" ] && [ "$INST_COUNT" != "null" ] && [ "$INST_COUNT" != "N/A" ]; then
+                PRICE_LINE="$PRICE_LINE across ${INST_COUNT} institutions."
+            else
+                PRICE_LINE="$PRICE_LINE."
+            fi
+        fi
+        PRICE_LINE="$PRICE_LINE Use analyst high target or internal guidance target as primary valuation anchors; use analyst mean only as lagging context."
     fi
 fi
 SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
@@ -127,18 +169,21 @@ FW_COUNT=$(for fw_id in "${FW_SEQUENCE[@]}"; do [ -f "$OUTPUTS_DIR/${TICKER_UPPE
 [ "${FW_COUNT:-0}" -eq 0 ] && { echo "ERROR: No framework outputs found; run frameworks first. Expected at least one of: ${OUTPUTS_DIR}/${TICKER_UPPER}_*.md" >&2; exit 1; }
 
 # Call API for synthesis (use same high limit as frameworks to avoid truncating verdict)
+log_trace "INFO" "09-synthesis" "Starting..."
 RESPONSE=$(call_llm_api "$FULL_SYNTHESIS_PROMPT" 8192)
 CONTENT=$(extract_content "$RESPONSE")
 read INPUT_TOKENS OUTPUT_TOKENS <<< "$(extract_usage "$RESPONSE" "$FULL_SYNTHESIS_PROMPT")"
 
 # Guard: API can return 200 with empty candidates (e.g. safety block); avoid overwriting with empty file
 if [ -z "${CONTENT//[[:space:]]/}" ]; then
+    log_trace "ERROR" "09-synthesis" "Empty synthesis response"
     echo "ERROR: Synthesis API returned no content (empty or blocked response). Check API response or try again." >&2
     exit 1
 fi
 
 # Save results (single final report only)
 echo "$CONTENT" > "$OUTPUTS_DIR/${TICKER_UPPER}_FINAL_REPORT.md"
+log_trace "INFO" "09-synthesis" "Complete | ${INPUT_TOKENS}i/${OUTPUT_TOKENS}o"
 
 # Log synthesis cost
 log_cost "$TICKER_UPPER" "09-synthesis" "$INPUT_TOKENS" "$OUTPUT_TOKENS"

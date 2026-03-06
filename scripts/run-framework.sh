@@ -54,20 +54,23 @@ fi
 get_relevant_context() {
     case "$FW_ID" in
         "07-business")
-            # Inject profile and financial metrics for business evaluation
-            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
+            # Inject profile, financial metrics, and sector_context for business evaluation
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
         "03-ai-moat") 
             # Inject ROE, valuation, and Earnings Surprises for Moat inference
             jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description}' "$DATA_FILE" ;;
         "08-risk") 
             # Inject valuation and momentum for Risk analysis
             jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile}' "$DATA_FILE" ;;
+        "05-sentiment")
+            # Valuation now uses momentum-adjusted anchors and institutional ownership context
+            jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile, metrics: {margin_inflection: .financial_metrics.margin_inflection, revenue_q_yoy: .financial_metrics.revenue_q_yoy, latest_q_gaap_gross_margin_pct: .financial_metrics.latest_q_gaap_gross_margin_pct, latest_q_non_gaap_gross_margin_pct: .financial_metrics.latest_q_non_gaap_gross_margin_pct}}' "$DATA_FILE" ;;
         "01-phase")
-            # Enriched context for lifecycle phase: profile + financial_metrics + valuation + momentum from *_data.json
-            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum}' "$DATA_FILE" ;;
+            # Enriched context for lifecycle phase: profile + financial_metrics + valuation + momentum + sector_context
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
         "02-metrics") 
-            # Core financial metrics
-            jq -c '{metrics: .financial_metrics, valuation: .valuation}' "$DATA_FILE" ;;
+            # Core financial metrics + sector_context (power metrics by sector)
+            jq -c '{metrics: .financial_metrics, valuation: .valuation, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
         *) 
             # Default to description and basic profile
             jq -c '{profile: .company_profile, valuation: .valuation}' "$DATA_FILE" ;;

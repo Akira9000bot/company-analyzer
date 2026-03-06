@@ -1,11 +1,11 @@
 # Framework Weights
 
-`framework-weights.json` defines **how much each of the 8 frameworks influences the final verdict** when evidence is combined or when frameworks disagree. Weights are a single source of truth: the synthesis prompt (09-synthesis.txt) instructs the model to use the injected numeric weights rather than any hardcoded tiers.
+`framework-weights.json` (in `references/`) defines **how much each of the 8 frameworks influences the final verdict** when evidence is combined or when frameworks disagree. Weights are a single source of truth: the synthesis prompt (09-synthesis.txt) instructs the model to use the injected numeric weights rather than any hardcoded tiers.
 
 ## What the weights do
 
-- **Relative influence:** Higher weight = more influence when the model combines evidence and resolves conflicts. A framework at 20% has more say than one at 6.25% when they point in different directions (e.g. Phase says “growth” but Risk says “high”).
-- **Conflict resolution:** When frameworks conflict, the model is told to defer to higher-weight frameworks. So raising a framework’s weight makes it more likely to override others; lowering it makes it more “supporting” (confirm or qualify, not override).
+- **Relative influence:** Higher weight = more influence when the model combines evidence and resolves conflicts. A framework at 20% has more say than one at 6.25% when they point in different directions (e.g. Phase says "growth" but Risk says "high").
+- **Conflict resolution:** When frameworks conflict, the model is told to defer to higher-weight frameworks. So raising a framework's weight makes it more likely to override others; lowering it makes it more "supporting" (confirm or qualify, not override).
 - **Sum = 1.0:** All weights must sum to 1.0. They are treated as a normalized distribution (e.g. 0.20 = 20%).
 
 ## Where the weights are used
@@ -27,7 +27,7 @@ Changing `framework-weights.json` is enough to change both synthesis behavior an
 
 - **Keys:** Must be the framework IDs: `01-phase`, `02-metrics`, `03-ai-moat`, `04-strategic-moat`, `05-sentiment`, `06-growth`, `07-business`, `08-risk`. All eight should be present if you want every framework to appear in the report and synthesis.
 - **Values:** Numbers between 0 and 1. Use decimals (e.g. `0.20`, `0.0625`). The script displays them as whole-number percentages (e.g. 20%, 6%).
-- **Sum:** Weights should sum to 1.0. If they don’t, the model still sees the raw percentages; normalization is not applied in the prompt.
+- **Sum:** Weights should sum to 1.0. If they don't, the model still sees the raw percentages; normalization is not applied in the prompt.
 
 ## How to adjust the weights
 

@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 PROMPTS_DIR="$SKILL_DIR/references/prompts"
+CONFIG_FILE="${OPENCLAW_CONFIG:-${HOME}/.openclaw/openclaw.json}"
 
 # Source libraries (cache.sh sets CACHE_DIR to $SKILL_DIR/.cache/llm-responses)
 source "$SCRIPT_DIR/lib/cache.sh"
@@ -110,7 +111,7 @@ done
 {
     echo "# Strategic Research Dossier: $TICKER_UPPER"
     echo "Analysis Date: $(date)"
-    echo "Model: $(jq -r '.agents.defaults.model.primary // "LLM"' "${CONFIG_FILE:-$HOME/.openclaw/openclaw.json}" 2>/dev/null | awk -F'/' '{print $NF}' || echo "LLM")"
+    echo "Model: $(jq -r '.agents.defaults.model.primary // "LLM"' "$CONFIG_FILE" 2>/dev/null | awk -F'/' '{print $NF}' || echo "LLM")"
     echo ""
     if [ -f "$WEIGHTS_FILE" ]; then
         WEIGHTS_SUMMARY=$(jq -r 'to_entries | sort_by(-.value) | map("\(.key): \(.value * 100 | floor)%") | join(", ")' "$WEIGHTS_FILE" 2>/dev/null || true)

@@ -1,8 +1,11 @@
 ROLE: Lifecycle Analyst (Dual-Period Logic) TASK: Classify into 1 of 6 Phases: 1.Startup, 2.Hyper-Growth, 3.Self-Funding, 4.Op-Leverage, 5.Capital-Return, 6.Decline. 
 
 DATA RULES:
-* Use the LATEST QUARTER metrics (revenue_q, net_income_q) and QUARTERLY YoY % (revenue_q_yoy, net_income_q_yoy) to compare Current Period vs. Same Period Prior Year. 
+* Use the LATEST QUARTER metrics (revenue_q, net_income_q) and QUARTERLY YoY % (revenue_q_yoy, net_income_q_yoy) to compare Current Period vs. Same Period Prior Year. Prefer quarterly delta (Q0 vs Q-1 vs Q-4) over annual averages.
+* When present, use quarterly_trend.revenue and quarterly_trend.gross_margin (last 4 quarters) to spot momentum; if margin_inflection is true, note that latest-quarter gross margin is meaningfully above annual (>150 bps, inflection). When latest_q_non_gaap_gross_margin_pct or latest_q_gaap_gross_margin_pct is in the data (from earnings release), use it as the most recent quarter gross margin.
 * Treat annual metrics (revenue, net_income, fcf) as background context for overall quality, not for the phase switch itself.
+* When present, use full_year_non_gaap_net_income_millions to recognize a non-GAAP profitability flip (e.g. first profitable year) and support Phase 3/4 (Self-Funding / Op-Leverage) even if GAAP net_income is negative. Optional (often null for non-SaaS): remaining_performance_obligations_rpo and rpo_yoy_pct for visibility/backlog strength; compute_and_ai_revenue_growth_yoy_pct for AI/segment momentum—use only when not null; skip or ignore when null.
+* When sector_context is present, use its category (TECH, RETAIL, INDUSTRIAL, FINANCE, GENERAL) and power_metrics: favor the sector "king" metric (TECH: RPO/AI growth; RETAIL: inventory turnover/gross margin; INDUSTRIAL: backlog/asset turnover; FINANCE: net interest margin) and downweight metrics less relevant for that sector.
 * Identify: Quarterly Revenue % Change, Op-Profit Trend, FCF (Op-Cash minus Capex), and Share Count Trend (Dilution vs. Buyback). When shares_prior and shares_yoy_pct (or shares_outstanding with prior) are in the data, use them to state direction and magnitude (e.g. "Up 2% YoY (mild dilution)" or "Down 1% (buybacks)"); when only current shares are available, state "Current shares: [N]; historical trend insufficient" and briefly infer from FCF/phase if helpful. 
 
 CLASSIFICATION ENGINE:
