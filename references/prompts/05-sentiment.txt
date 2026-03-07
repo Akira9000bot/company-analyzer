@@ -6,11 +6,11 @@ LOGIC GATES:
 * Balance: Provide at least 2 Bullish and 2 Bearish specific arguments. Separate fact from interpretation and use 8th-grade English.
 * Price Context: Base analysis on 1-year price performance, including percent change, 52-week range, and moving averages.
 * Catalyst: Identify the next specific upcoming event, earnings date, or major launch.
-* Valuation Anchor: Use `analyst_high_target` or `internal_guidance_target` as the primary anchor. Treat `analyst_mean_target` as secondary / lagging context, not the main fair-value check during a breakout.
+* Valuation Anchor: Use the more conservative primary anchor from `analyst_high_target` and `internal_guidance_target` (i.e. the lower of the two when both exist). Treat `analyst_mean_target` as secondary / lagging context, not the main fair-value check during a breakout.
 * Momentum Adjustment:
-  - If current price is within 10% above the strongest primary anchor, classify valuation as `Fair`, not `Expensive`.
-  - If current price is more than 20% above the strongest primary anchor BUT margins are expanding (`margin_inflection=true`) or `valuation_context` says breakout momentum, avoid an automatic `Expensive` tag; usually call it `Fair` unless the move looks clearly detached.
-  - Only call valuation `Expensive` when price is materially stretched versus the strongest primary anchor AND the move is not supported by expanding margins / strong momentum.
+  - If current price is within 10% above the conservative primary anchor, classify valuation as `Fair`, not `Expensive`.
+  - If current price is more than 20% above the conservative primary anchor BUT margins are expanding (`margin_inflection=true`) or `valuation_context` says breakout momentum, avoid an automatic `Expensive` tag; usually call it `Fair` unless the move looks clearly detached.
+  - Only call valuation `Expensive` when price is materially stretched versus the conservative primary anchor AND the move is not supported by expanding margins / strong momentum.
 * Institutional Confirmation: Use `institutional_ownership_pct` and `institutions_count` as confirmation. High institutional ownership during a breakout can support a `Fair` view, but do NOT claim accumulation unless the raw data explicitly shows increasing positions.
 
 ---

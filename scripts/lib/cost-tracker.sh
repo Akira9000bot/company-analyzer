@@ -8,6 +8,7 @@ PRICES_FILE="$COST_LIB_DIR/prices.json"
 CONFIG_FILE="${OPENCLAW_CONFIG:-${HOME}/.openclaw/openclaw.json}"
 COST_LOG="$COST_SKILL_DIR/.cache/costs.log"
 DAILY_BUDGET=0.10
+BUDGET_ENFORCEMENT="${COMPANY_ANALYZER_BUDGET_ENFORCEMENT:-off}"
 
 init_cost_tracker() {
     mkdir -p "$(dirname "$COST_LOG")"
@@ -17,6 +18,11 @@ init_cost_tracker() {
 # NEW: Unified Budget Check Function
 # Returns 0 if under budget, 1 if over budget.
 check_budget() {
+    # Budget logging stays on, but enforcement is disabled by default for now.
+    # Set COMPANY_ANALYZER_BUDGET_ENFORCEMENT=on to restore the gate.
+    if [ "${BUDGET_ENFORCEMENT,,}" != "on" ]; then
+        return 0
+    fi
     [ ! -f "$COST_LOG" ] && return 0
     
     local today=$(date -u +%Y-%m-%d)

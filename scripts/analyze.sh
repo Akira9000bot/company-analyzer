@@ -97,8 +97,9 @@ fi
 REFERENCE_DATE=$(date -u +%Y-%m-%d)
 REFERENCE_DATE_LINE="REFERENCE DATE: $REFERENCE_DATE. All VERDICT TRIGGERS (catalysts) must be expressed relative to this date—i.e. the next 2 quarters and upcoming earnings from today, not past quarters. Example: if today is March 2026, say 'Q1 2026' or 'upcoming Q1 2026 earnings,' not 'Q4 2024.'"
 
-# Inject valuation anchors from data so synthesis uses current guidance/high target, not a lagging mean target
+# Inject valuation anchors from data so synthesis uses the conservative primary anchor, not a lagging mean target
 PRICE_LINE=""
+CHEAP_DEFINITION_LINE=""
 if [ -f "$DATA_FILE" ]; then
     CURRENT_PRICE=$(jq -r '.valuation.current_price // empty' "$DATA_FILE" 2>/dev/null)
     TARGET_MEAN=$(jq -r '.valuation.analyst_mean_target // .valuation.target_mean_price // empty' "$DATA_FILE" 2>/dev/null)
@@ -121,11 +122,11 @@ if [ -f "$DATA_FILE" ]; then
         fi
         if [ -n "$TARGET_HIGH" ] && [ "$TARGET_HIGH" != "null" ] && [ "$TARGET_HIGH" != "N/A" ]; then
             TARGET_HIGH_FMT=$(printf "%.2f" "$TARGET_HIGH" 2>/dev/null || echo "$TARGET_HIGH")
-            PRICE_LINE="$PRICE_LINE Analyst high target (primary anchor): \$${TARGET_HIGH_FMT}."
+            PRICE_LINE="$PRICE_LINE Analyst high target (candidate primary anchor): \$${TARGET_HIGH_FMT}."
         fi
         if [ -n "$INTERNAL_GUIDANCE_TARGET" ] && [ "$INTERNAL_GUIDANCE_TARGET" != "null" ] && [ "$INTERNAL_GUIDANCE_TARGET" != "N/A" ]; then
             INTERNAL_FMT=$(printf "%.2f" "$INTERNAL_GUIDANCE_TARGET" 2>/dev/null || echo "$INTERNAL_GUIDANCE_TARGET")
-            PRICE_LINE="$PRICE_LINE Internal guidance target (primary anchor): \$${INTERNAL_FMT}"
+            PRICE_LINE="$PRICE_LINE Internal guidance target (candidate primary anchor): \$${INTERNAL_FMT}"
             if [ -n "$GUIDANCE_EPS" ] && [ "$GUIDANCE_EPS" != "null" ] && [ "$GUIDANCE_EPS" != "N/A" ] && [ -n "$GUIDANCE_MULTIPLE" ] && [ "$GUIDANCE_MULTIPLE" != "null" ] && [ "$GUIDANCE_MULTIPLE" != "N/A" ]; then
                 PRICE_LINE="$PRICE_LINE from guidance EPS ${GUIDANCE_EPS} x ${GUIDANCE_MULTIPLE}x."
             else
@@ -134,7 +135,12 @@ if [ -f "$DATA_FILE" ]; then
         fi
         if [ -n "$PRIMARY_ANCHOR" ] && [ "$PRIMARY_ANCHOR" != "null" ] && [ "$PRIMARY_ANCHOR" != "N/A" ] && [ -n "$PRIMARY_ANCHOR_SOURCE" ] && [ "$PRIMARY_ANCHOR_SOURCE" != "null" ] && [ "$PRIMARY_ANCHOR_SOURCE" != "N/A" ]; then
             PRIMARY_FMT=$(printf "%.2f" "$PRIMARY_ANCHOR" 2>/dev/null || echo "$PRIMARY_ANCHOR")
-            PRICE_LINE="$PRICE_LINE Strongest primary valuation anchor: \$${PRIMARY_FMT} (${PRIMARY_ANCHOR_SOURCE})."
+            PRICE_LINE="$PRICE_LINE Conservative primary valuation anchor: \$${PRIMARY_FMT} (${PRIMARY_ANCHOR_SOURCE})."
+            # Discount to anchor for Step 4b "Cheap" definition (strict: ≥15% below anchor)
+            if [[ "$CURRENT_PRICE" =~ ^[0-9.]+$ ]] && [[ "$PRIMARY_ANCHOR" =~ ^[0-9.]+$ ]] && [ "$(echo "$PRIMARY_ANCHOR > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                DISCOUNT_PCT=$(echo "scale=2; ($PRIMARY_ANCHOR - $CURRENT_PRICE) * 100 / $PRIMARY_ANCHOR" | bc 2>/dev/null || echo "")
+                [ -n "$DISCOUNT_PCT" ] && PRICE_LINE="$PRICE_LINE Discount to primary anchor: ${DISCOUNT_PCT}%."
+            fi
         fi
         if [ -n "$VALUATION_CONTEXT" ] && [ "$VALUATION_CONTEXT" != "null" ]; then
             PRICE_LINE="$PRICE_LINE Valuation context: ${VALUATION_CONTEXT}."
@@ -150,7 +156,25 @@ if [ -f "$DATA_FILE" ]; then
                 PRICE_LINE="$PRICE_LINE."
             fi
         fi
-        PRICE_LINE="$PRICE_LINE Use analyst high target or internal guidance target as primary valuation anchors; use analyst mean only as lagging context."
+        PRICE_LINE="$PRICE_LINE Use the lower of analyst high target and internal guidance target as the primary valuation anchor; use analyst mean only as lagging context."
+    fi
+    # Inject ROA and revenue growth for Phase 4/5 guardrails (capital-efficiency and maturity cap)
+    ROA_PCT=$(jq -r '.financial_metrics.roa // empty' "$DATA_FILE" 2>/dev/null | sed 's/%//')
+    REV_YOY=$(jq -r '.financial_metrics.revenue_yoy // empty' "$DATA_FILE" 2>/dev/null)
+    REV_Q_YOY=$(jq -r '.financial_metrics.revenue_q_yoy // empty' "$DATA_FILE" 2>/dev/null)
+    GUARDRAIL_LINE=""
+    if [[ -n "$ROA_PCT" && "$ROA_PCT" != "null" ]]; then
+        GUARDRAIL_LINE="GUARDRAIL DATA: roa_pct: ${ROA_PCT}"
+        if [[ -n "$REV_Q_YOY" && "$REV_Q_YOY" != "null" && "$REV_Q_YOY" != "N/A" ]]; then
+            GUARDRAIL_LINE="$GUARDRAIL_LINE, revenue_q_yoy_pct: ${REV_Q_YOY}"
+        elif [[ -n "$REV_YOY" && "$REV_YOY" != "null" && "$REV_YOY" != "N/A" ]]; then
+            GUARDRAIL_LINE="$GUARDRAIL_LINE, revenue_yoy_pct: ${REV_YOY}"
+        fi
+        GUARDRAIL_LINE="$GUARDRAIL_LINE. Use for Phase 4/5 capital-efficiency (STRONG BUY only if roa_pct ≥ 6) and Phase 5 maturity cap (STRONG BUY only if revenue growth ≥ 12% or roa_pct ≥ 6 and Cheap)."
+    fi
+    # Strict "Cheap" definition for Step 4b: price must be at least 15% below primary anchor
+    if [ -n "$PRIMARY_ANCHOR" ] && [ "$PRIMARY_ANCHOR" != "null" ] && [ "$PRIMARY_ANCHOR" != "N/A" ]; then
+        CHEAP_DEFINITION_LINE="PHASE 5 'CHEAP' DEFINITION (Step 4b only): 'Cheap' means strictly: current price is at least 15% below the conservative primary anchor (i.e. discount ≥ 15%). A 2% or 5% discount is NOT Cheap; do not treat small discounts as Cheap."
     fi
 fi
 SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
@@ -159,6 +183,12 @@ $REFERENCE_DATE_LINE"
 [ -n "$PRICE_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 $PRICE_LINE"
+[ -n "$GUARDRAIL_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+
+$GUARDRAIL_LINE"
+[ -n "$CHEAP_DEFINITION_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+
+$CHEAP_DEFINITION_LINE"
 FULL_SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 === 8 FRAMEWORK ANALYSES ===
