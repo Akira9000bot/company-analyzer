@@ -5,8 +5,8 @@ SCORING (Green = strong, Yellow = okay, Red = weak):
 * Phase 1 (Startup): Revenue (Green: >30% YoY | Yellow: >0% | Red: None), Gross Margin (Green: >0% & Improving | Yellow: >0% | Red: <0%), Cash Runway (Green: 3+ Yrs or FCF+ | Yellow: 1.5-3 Yrs | Red: <1.5 Yrs), Revenue vs. Estimates (Green: 4/4 beats | Yellow: 5-7/8 beats | Red: <5/8 beats), Shares Out 3YR CAGR (Green: <4% | Yellow: 4-7% | Red: >7%).
 * Phase 2 (Hyper-Growth): Revenue Momentum (Green: Accelerating | Yellow: Stable | Red: Decelerating >5% drop), Rule of 40 (Green: 40+ | Yellow: 20-40 | Red: <20), Net Dollar Retention (Green: >115% | Yellow: 100-115% | Red: <100%), Gross Margin Direction (Green: Rising | Yellow: Stable +/-1pp | Red: Declining), Shares Out YoY (Green: <3% | Yellow: 3-5% | Red: >5%).
 * Phase 3 (Self-Funding): Revenue 3YR CAGR (Green: >25% | Yellow: 15-25% | Red: <15%), Gross Margin Direction (Green: Rising | Yellow: Stable +/-1pp | Red: Declining), Operating Margin (Green: >2% & Rising | Yellow: -2% to +2% | Red: <-2%), Free Cash Flow (Green: Positive & Rising | Yellow: Positive | Red: Negative), Shares Out 3YR CAGR (Green: <1% | Yellow: 1-3% | Red: >3%).
-* Phase 4 (Op-Leverage): Revenue 3YR CAGR (Green: >20% | Yellow: 10-20% | Red: <10%), Operating Margin (Green: Positive & Rising | Yellow: Positive & Stable +/-1pp | Red: Declining), FCF Margin (Green: Positive & Rising | Yellow: Positive | Red: Contracting/Negative), Earnings vs. Estimates (Green: 4/4 beats | Yellow: 5-7/8 beats | Red: <5/8 beats), ROIC (Green: >5% & Rising 3 of 4 qtrs | Yellow: 0-5% | Red: <0%).
-* Phase 5 (Capital-Return): Revenue 3YR CAGR (Green: >10% | Yellow: 5-10% | Red: <5%), FCF/Net Income (Green: >90% | Yellow: 50-90% | Red: <50%), EBIT/Interest Expense (Green: 5+ or debt-free | Yellow: 2-5 | Red: <2), ROIC (Green: >20% | Yellow: 10-20% | Red: <10%), Capital Returns (Green: Yes, 5+ Years | Yellow: Yes, <5 Years | Red: None).
+* Phase 4 (Op-Leverage): Revenue 3YR CAGR (Green: >20% | Yellow: 10-20% | Red: <10%), Operating Margin (Green: Positive & Rising | Yellow: Positive & Stable +/-1pp | Red: Declining), FCF Margin (Green: Positive & Rising | Yellow: Positive | Red: Contracting/Negative), Earnings vs. Estimates (Green: 4/4 beats | Yellow: 5-7/8 beats | Red: <5/8 beats), Return on Assets Proxy (Green: >4% | Yellow: 1-4% | Red: <1%).
+* Phase 5 (Capital-Return): Revenue 3YR CAGR (Green: >10% = strong for mature; Yellow: 5-10% = good but not elite; Red: <5%). For Phase 5, 5–10% growth is "good," not "elite"—do not inflate the overall metrics score. FCF/Net Income (Green: >90% | Yellow: 50-90% | Red: <50%), EBIT/Interest Expense (Green: 5+ or debt-free | Yellow: 2-5 | Red: <2), Return on Assets Proxy (Green: >6% | Yellow: 3-6% | Red: <3%), Capital Returns (Green: Yes, 5+ Years | Yellow: Yes, <5 Years | Red: None).
 * Phase 6 (Decline): No metrics scored. Framework advises avoiding these companies.
 
 ---
@@ -22,8 +22,8 @@ Use this exact format, one line per metric (short reason only):
 Phase 1 order: Revenue, Gross Margin, Cash Runway, Revenue vs. Estimates, Shares Out 3YR CAGR.
 Phase 2: Revenue Momentum, Rule of 40, Net Dollar Retention, Gross Margin Direction, Shares Out YoY.
 Phase 3: Revenue 3YR CAGR, Gross Margin Direction, Operating Margin, Free Cash Flow, Shares Out 3YR CAGR.
-Phase 4: Revenue 3YR CAGR, Operating Margin, FCF Margin, Earnings vs. Estimates, ROIC.
-Phase 5: Revenue 3YR CAGR, FCF/Net Income, EBIT/Interest Expense, ROIC, Capital Returns.
+Phase 4: Revenue 3YR CAGR, Operating Margin, FCF Margin, Earnings vs. Estimates, Return on Assets Proxy.
+Phase 5: Revenue 3YR CAGR, FCF/Net Income, EBIT/Interest Expense, Return on Assets Proxy, Capital Returns.
 Phase 6: One line only: "Phase 6 (Decline): No metrics scored. Framework advises avoiding."
 
 SUMMARY:

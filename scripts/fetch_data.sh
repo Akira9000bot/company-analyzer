@@ -64,6 +64,27 @@ format_millions() {
     fi
 }
 
+# Convert values expressed in millions to raw-dollar integers for consistent math in JSON.
+millions_to_dollars() {
+    local val="${1:-}"
+    if [[ -n "$val" && "$val" != "N/A" && "$val" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        awk -v n="$val" 'BEGIN { printf "%.0f", n * 1000000 }'
+    else
+        echo "N/A"
+    fi
+}
+
+percent_number() {
+    local val="${1:-}"
+    if [[ "$val" =~ ^(-?[0-9]+(\.[0-9]+)?)%$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+    elif [[ "$val" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "$val"
+    else
+        echo "N/A"
+    fi
+}
+
 # ============================================
 # Step 1: Yahoo Finance Extraction
 # ============================================
@@ -105,11 +126,12 @@ NET_INTEREST_MARGIN="N/A"
 
 DESC=$(jq -r '.quoteSummary.result[0].assetProfile.longBusinessSummary // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 
-# Extract ROE, margins, ROIC from financialData (used by 02-metrics and phase logic)
+# Extract ROE, margins, and ROA proxy from Yahoo financialData.
+# Yahoo exposes returnOnAssets here, not true ROIC.
 ROE=$(jq -r '.quoteSummary.result[0].financialData.returnOnEquity.fmt // .quoteSummary.result[0].financialData.returnOnEquity.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 GROSS_MARGIN=$(jq -r '.quoteSummary.result[0].financialData.grossMargins.fmt // .quoteSummary.result[0].financialData.grossMargins.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 OP_MARGIN=$(jq -r '.quoteSummary.result[0].financialData.operatingMargins.fmt // .quoteSummary.result[0].financialData.operatingMargins.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
-ROIC=$(jq -r '.quoteSummary.result[0].financialData.returnOnAssets.fmt // .quoteSummary.result[0].financialData.returnOnAssets.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
+ROA=$(jq -r '.quoteSummary.result[0].financialData.returnOnAssets.fmt // .quoteSummary.result[0].financialData.returnOnAssets.raw // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 
 PRICE=$(jq -r '.quoteResponse.result[0].regularMarketPrice // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
 MCAP=$(jq -r '.quoteResponse.result[0].marketCap // "N/A"' "${Y_RAW}_quote" 2>/dev/null || echo "N/A")
@@ -137,6 +159,9 @@ if [ -z "$GUIDANCE_EPS" ] && [[ -n "$GUIDANCE_EPS_LOW" && -n "$GUIDANCE_EPS_HIGH
     GUIDANCE_EPS=$(echo "scale=4; ($GUIDANCE_EPS_LOW + $GUIDANCE_EPS_HIGH) / 2" | bc 2>/dev/null || echo "")
 fi
 GROWTH_MULTIPLE="N/A"
+GROWTH_MULTIPLE_UNCAPPED="N/A"
+GROWTH_MULTIPLE_CAP="N/A"
+GROWTH_MULTIPLE_CAP_REASON="N/A"
 INTERNAL_FAIR_VALUE="N/A"
 GUIDANCE_FORWARD_PE="N/A"
 PRIMARY_VALUATION_ANCHOR="N/A"
@@ -293,7 +318,7 @@ if [[ "$OP_MARGIN" == "N/A" || -z "$OP_MARGIN" ]]; then
 fi
 [[ -z "$GROSS_MARGIN" ]] && GROSS_MARGIN="N/A"
 [[ -z "$OP_MARGIN" ]] && OP_MARGIN="N/A"
-[[ -z "$ROIC" ]] && ROIC="N/A"
+[[ -z "$ROA" ]] && ROA="N/A"
 
 # ============================================
 # Step 3: SEC Data (Final Precision)
@@ -603,6 +628,75 @@ if [[ "$REV_Q_YOY" = "N/A" || -z "$REV_Q_YOY" ]] && [[ -n "$REVENUE_GROWTH_HINT_
     log_trace "INFO" "fetch_data" "revenue_q_yoy fallback=financialData.revenueGrowth (${REV_Q_YOY}%)"
 fi
 
+# Normalize and quality-check optional money metrics BEFORE valuation logic so bad RPO parses
+# cannot affect guidance multiple caps or anchors.
+RPO_DOLLARS="N/A"
+FULL_YEAR_NON_GAAP_NI_DOLLARS="N/A"
+RPO_COVERAGE_RATIO="N/A"
+RPO_QUALITY_STATUS="missing"
+RPO_SOURCE="missing"
+if [ -n "${FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS:-}" ]; then
+    FULL_YEAR_NON_GAAP_NI_DOLLARS=$(millions_to_dollars "$FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS")
+fi
+
+# Candidate 1: earnings-release RPO (usually millions)
+if [[ "${RPO_MILLIONS:-}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    CANDIDATE_RPO_DOLLARS=$(millions_to_dollars "$RPO_MILLIONS")
+    CANDIDATE_RPO_MILLIONS="$RPO_MILLIONS"
+    CANDIDATE_RPO_YOY="${RPO_YOY_PCT:-N/A}"
+    CANDIDATE_RPO_COVERAGE="N/A"
+    CANDIDATE_RPO_STATUS="present_unchecked"
+    if [[ "$CANDIDATE_RPO_DOLLARS" =~ ^-?[0-9]+$ ]] && [[ "$CURR_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_REV > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        CANDIDATE_RPO_COVERAGE=$(awk -v rpo="$CANDIDATE_RPO_DOLLARS" -v rev="$CURR_REV" 'BEGIN { printf "%.4f", rpo / rev }')
+        CANDIDATE_RPO_STATUS="valid"
+        if [ "$SECTOR_TYPE" = "TECH" ] && [ "$(echo "$CANDIDATE_RPO_COVERAGE < 0.01" | bc 2>/dev/null || echo 0)" = "1" ]; then
+            CANDIDATE_RPO_STATUS="suspect_too_small_vs_revenue"
+        fi
+    fi
+    if [ "$CANDIDATE_RPO_STATUS" = "valid" ] || [ "$CANDIDATE_RPO_STATUS" = "present_unchecked" ]; then
+        RPO_DOLLARS="$CANDIDATE_RPO_DOLLARS"
+        RPO_COVERAGE_RATIO="$CANDIDATE_RPO_COVERAGE"
+        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
+        RPO_SOURCE="earnings_release"
+    else
+        RPO_MILLIONS="N/A"
+        RPO_YOY_PCT="N/A"
+        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
+        log_trace "WARN" "fetch_data" "earnings-release RPO rejected as implausibly small vs revenue"
+    fi
+fi
+
+# Candidate 2: SEC companyfacts RPO fallback if earnings-release RPO was missing or rejected.
+if [[ ("$RPO_QUALITY_STATUS" = "missing" || "$RPO_QUALITY_STATUS" = "suspect_too_small_vs_revenue") && "${SEC_RPO:-}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    CANDIDATE_RPO_DOLLARS=$(awk -v n="$SEC_RPO" 'BEGIN { printf "%.0f", n }')
+    CANDIDATE_RPO_MILLIONS=$(format_millions "$SEC_RPO")
+    CANDIDATE_RPO_COVERAGE="N/A"
+    CANDIDATE_RPO_STATUS="present_unchecked"
+    if [[ "$CANDIDATE_RPO_DOLLARS" =~ ^-?[0-9]+$ ]] && [[ "$CURR_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_REV > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        CANDIDATE_RPO_COVERAGE=$(awk -v rpo="$CANDIDATE_RPO_DOLLARS" -v rev="$CURR_REV" 'BEGIN { printf "%.4f", rpo / rev }')
+        CANDIDATE_RPO_STATUS="valid"
+        if [ "$SECTOR_TYPE" = "TECH" ] && [ "$(echo "$CANDIDATE_RPO_COVERAGE < 0.01" | bc 2>/dev/null || echo 0)" = "1" ]; then
+            CANDIDATE_RPO_STATUS="suspect_too_small_vs_revenue"
+        fi
+    fi
+    if [ "$CANDIDATE_RPO_STATUS" = "valid" ] || [ "$CANDIDATE_RPO_STATUS" = "present_unchecked" ]; then
+        RPO_DOLLARS="$CANDIDATE_RPO_DOLLARS"
+        RPO_MILLIONS="$CANDIDATE_RPO_MILLIONS"
+        RPO_YOY_PCT="N/A"
+        RPO_COVERAGE_RATIO="$CANDIDATE_RPO_COVERAGE"
+        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
+        RPO_SOURCE="sec_companyfacts"
+        log_trace "INFO" "fetch_data" "RPO fallback accepted from SEC companyfacts"
+    else
+        RPO_DOLLARS="N/A"
+        RPO_MILLIONS="N/A"
+        RPO_YOY_PCT="N/A"
+        RPO_COVERAGE_RATIO="N/A"
+        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
+        log_trace "WARN" "fetch_data" "SEC RPO rejected as implausibly small vs revenue"
+    fi
+fi
+
 # Momentum-adjusted valuation anchors: use forward EPS guidance and analyst high target, not just mean target.
 if [[ -n "$FULL_YEAR_GUIDANCE_EPS_LOW" && "$FULL_YEAR_GUIDANCE_EPS_LOW" != "N/A" && "$FULL_YEAR_GUIDANCE_EPS_LOW" =~ ^-?[0-9.]+$ ]] && \
    [[ -n "$FULL_YEAR_GUIDANCE_EPS_HIGH" && "$FULL_YEAR_GUIDANCE_EPS_HIGH" != "N/A" && "$FULL_YEAR_GUIDANCE_EPS_HIGH" =~ ^-?[0-9.]+$ ]]; then
@@ -616,6 +710,10 @@ if [[ -n "$GUIDANCE_EPS" && "$GUIDANCE_EPS" != "N/A" && "$GUIDANCE_EPS" =~ ^-?[0
     if [[ -z "$GROWTH_SIGNAL_PCT" || "$GROWTH_SIGNAL_PCT" = "N/A" || ! "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]]; then
         GROWTH_SIGNAL_PCT="$REVENUE_GROWTH_HINT_PCT"
     fi
+    POSITIVE_NI="0"
+    POSITIVE_FCF="0"
+    [[ "$CURR_NI" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_NI > 0" | bc 2>/dev/null || echo 0)" = "1" ] && POSITIVE_NI="1"
+    [[ "$FCF" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$FCF > 0" | bc 2>/dev/null || echo 0)" = "1" ] && POSITIVE_FCF="1"
     case "$SECTOR_TYPE" in
         TECH)
             if [[ "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]] && [ "$(echo "$GROWTH_SIGNAL_PCT >= 20" | bc 2>/dev/null || echo 0)" = "1" ]; then
@@ -626,11 +724,44 @@ if [[ -n "$GUIDANCE_EPS" && "$GUIDANCE_EPS" != "N/A" && "$GUIDANCE_EPS" =~ ^-?[0
                 GROWTH_MULTIPLE="45"
             fi
             ;;
-        RETAIL) GROWTH_MULTIPLE="22" ;;
+        RETAIL)
+            # High-growth commerce / fintech platforms should not be forced into a mature retail multiple.
+            if [[ "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]] && [ "$(echo "$GROWTH_SIGNAL_PCT > 30" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                GROWTH_MULTIPLE="40"
+            elif [[ "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]] && [ "$(echo "$GROWTH_SIGNAL_PCT >= 15" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                GROWTH_MULTIPLE="30"
+            elif [ "$POSITIVE_NI" = "1" ] && [ "$POSITIVE_FCF" = "1" ]; then
+                GROWTH_MULTIPLE="25"
+            else
+                GROWTH_MULTIPLE="22"
+            fi
+            ;;
         INDUSTRIAL) GROWTH_MULTIPLE="20" ;;
         FINANCE) GROWTH_MULTIPLE="12" ;;
         *) GROWTH_MULTIPLE="18" ;;
     esac
+    GROWTH_MULTIPLE_UNCAPPED="$GROWTH_MULTIPLE"
+    # Cap guidance multiples for slower, mature names so internal targets remain grounded.
+    # This approximates lifecycle maturity without depending on 01-phase output.
+    if [[ "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]] && [ "$(echo "$GROWTH_SIGNAL_PCT >= 20" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        GROWTH_MULTIPLE_CAP="100"
+        GROWTH_MULTIPLE_CAP_REASON="high_growth_cap"
+    elif [[ "${COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT:-}" =~ ^-?[0-9.]+$ ]] && [ "$(echo "${COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT} >= 40" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        GROWTH_MULTIPLE_CAP="100"
+        GROWTH_MULTIPLE_CAP_REASON="ai_pivot_cap"
+    elif [[ "${RPO_YOY_PCT:-}" =~ ^-?[0-9.]+$ ]] && [ "$(echo "${RPO_YOY_PCT} >= 40" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        GROWTH_MULTIPLE_CAP="100"
+        GROWTH_MULTIPLE_CAP_REASON="rpo_surge_cap"
+    elif [[ "$GROWTH_SIGNAL_PCT" =~ ^-?[0-9.]+$ ]] && [ "$(echo "$GROWTH_SIGNAL_PCT < 15" | bc 2>/dev/null || echo 0)" = "1" ] && [ "$POSITIVE_NI" = "1" ] && [ "$POSITIVE_FCF" = "1" ]; then
+        GROWTH_MULTIPLE_CAP="25"
+        GROWTH_MULTIPLE_CAP_REASON="mature_growth_cap"
+    else
+        GROWTH_MULTIPLE_CAP="60"
+        GROWTH_MULTIPLE_CAP_REASON="inflection_growth_cap"
+    fi
+    if [[ "$GROWTH_MULTIPLE" =~ ^[0-9.]+$ && "$GROWTH_MULTIPLE_CAP" =~ ^[0-9.]+$ ]] && [ "$(echo "$GROWTH_MULTIPLE > $GROWTH_MULTIPLE_CAP" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        GROWTH_MULTIPLE="$GROWTH_MULTIPLE_CAP"
+    fi
     if [[ "$GROWTH_MULTIPLE" =~ ^[0-9.]+$ ]]; then
         INTERNAL_FAIR_VALUE=$(echo "scale=2; $GUIDANCE_EPS * $GROWTH_MULTIPLE" | bc 2>/dev/null || echo "N/A")
         if [[ "$PRICE" =~ ^[0-9.]+$ ]] && [ "$(echo "$GUIDANCE_EPS > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
@@ -645,7 +776,8 @@ if [[ "$TARGET_HIGH" =~ ^[0-9.]+$ ]]; then
     PRIMARY_VALUATION_ANCHOR_SOURCE="analyst_high_target"
 fi
 if [[ "$INTERNAL_FAIR_VALUE" =~ ^[0-9.]+$ ]]; then
-    if [ -z "$PRIMARY_VAL_NUM" ] || [ "$(echo "$INTERNAL_FAIR_VALUE > $PRIMARY_VAL_NUM" | bc 2>/dev/null || echo 0)" = "1" ]; then
+    # Be conservative: if both primary anchors exist, prefer the lower / more demanding one.
+    if [ -z "$PRIMARY_VAL_NUM" ] || [ "$(echo "$INTERNAL_FAIR_VALUE < $PRIMARY_VAL_NUM" | bc 2>/dev/null || echo 0)" = "1" ]; then
         PRIMARY_VAL_NUM="$INTERNAL_FAIR_VALUE"
         PRIMARY_VALUATION_ANCHOR_SOURCE="internal_guidance_target"
     fi
@@ -668,6 +800,9 @@ if [[ "$PRICE" =~ ^[0-9.]+$ ]] && [ -n "$PRIMARY_VAL_NUM" ] && [ "$(echo "$PRIMA
     fi
 fi
 log_trace "INFO" "fetch_data" "valuation anchor=${PRIMARY_VALUATION_ANCHOR_SOURCE} value=${PRIMARY_VALUATION_ANCHOR}"
+if [[ "$GROWTH_MULTIPLE_UNCAPPED" =~ ^[0-9.]+$ ]] && [[ "$GROWTH_MULTIPLE" =~ ^[0-9.]+$ ]]; then
+    log_trace "INFO" "fetch_data" "guidance multiple raw=${GROWTH_MULTIPLE_UNCAPPED} final=${GROWTH_MULTIPLE} cap=${GROWTH_MULTIPLE_CAP:-N/A} reason=${GROWTH_MULTIPLE_CAP_REASON:-N/A}"
+fi
 
 # ============================================
 # Phase 3: Sector-specific power_metrics payload (for sector_context; tells AI which lens to use)
@@ -683,16 +818,16 @@ case "$SECTOR_TYPE" in
         AI_VAL="${COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT:-N/A}"
         [ "$AI_VAL" = "" ] && AI_VAL="N/A"
         DEF_REV_VAL=$(format_millions "$SEC_DEFERRED_REV")
-        SECTOR_DATA=$(jq -n --arg rpo "$RPO_VAL" --arg ai "$AI_VAL" --arg def_rev "$DEF_REV_VAL" \
-            '{key_metric: "RPO", value: $rpo, ai_pivot_growth_pct: $ai, deferred_revenue: $def_rev}' 2>/dev/null || echo "{}")
+        SECTOR_DATA=$(jq -n --arg rpo "$RPO_VAL" --arg rpo_dollars "$RPO_DOLLARS" --arg rpo_cov "$RPO_COVERAGE_RATIO" --arg rpo_quality "$RPO_QUALITY_STATUS" --arg ai "$AI_VAL" --arg def_rev "$DEF_REV_VAL" --arg def_rev_dollars "$SEC_DEFERRED_REV" \
+            '{key_metric: "RPO", value: $rpo, value_dollars: (if $rpo_dollars != "" and $rpo_dollars != "N/A" then ($rpo_dollars | tonumber?) else null end), rpo_coverage_ratio: (if $rpo_cov != "" and $rpo_cov != "N/A" then ($rpo_cov | tonumber?) else null end), rpo_quality_status: (if $rpo_quality != "" then $rpo_quality else "missing" end), ai_pivot_growth_pct: $ai, deferred_revenue: $def_rev, deferred_revenue_dollars: (if $def_rev_dollars != "" and $def_rev_dollars != "N/A" then ($def_rev_dollars | tonumber?) else null end)}' 2>/dev/null || echo "{}")
         ;;
     RETAIL)
         SECTOR_DATA=$(jq -n --arg turn "$INV_TURNOVER" --arg gm "$GROSS_MARGIN" \
             '{key_metric: "Inventory Turnover", value: $turn, gross_margin: $gm}' 2>/dev/null || echo "{}")
         ;;
     INDUSTRIAL)
-        SECTOR_DATA=$(jq -n --arg backlog "$BACKLOG" --arg at "$ASSET_TURNOVER" --arg roic "$ROIC" \
-            '{key_metric: "Backlog", value: $backlog, asset_turnover: $at, roic: $roic}' 2>/dev/null || echo "{}")
+        SECTOR_DATA=$(jq -n --arg backlog "$BACKLOG" --arg at "$ASSET_TURNOVER" --arg roa "$ROA" \
+            '{key_metric: "Backlog", value: $backlog, asset_turnover: $at, roa: $roa}' 2>/dev/null || echo "{}")
         ;;
     FINANCE)
         SECTOR_DATA=$(jq -n --arg nim "$NET_INTEREST_MARGIN" --arg roe "$ROE" \
@@ -732,6 +867,9 @@ jq -n \
     --arg guidance_eps_high "${GUIDANCE_EPS_HIGH:-}" \
     --arg guidance_period "${GUIDANCE_PERIOD:-}" \
     --arg growth_multiple "$GROWTH_MULTIPLE" \
+    --arg growth_multiple_uncapped "$GROWTH_MULTIPLE_UNCAPPED" \
+    --arg growth_multiple_cap "$GROWTH_MULTIPLE_CAP" \
+    --arg growth_multiple_cap_reason "$GROWTH_MULTIPLE_CAP_REASON" \
     --arg internal_fair_value "$INTERNAL_FAIR_VALUE" \
     --arg guidance_forward_pe "$GUIDANCE_FORWARD_PE" \
     --arg valuation_context "$VALUATION_CONTEXT" \
@@ -742,13 +880,17 @@ jq -n \
     --arg roe "$ROE" \
     --arg gross_margin "$GROSS_MARGIN" \
     --arg op_margin "$OP_MARGIN" \
-    --arg roic "$ROIC" \
+    --arg roa "$ROA" \
     --arg latest_q_gross_margin "$LATEST_Q_GROSS_MARGIN_PCT" \
     --arg latest_q_gaap_gm "${LATEST_Q_GAAP_GM_PCT:-}" \
     --arg latest_q_non_gaap_gm "${LATEST_Q_NON_GAAP_GM_PCT:-}" \
     --arg rpo_millions "${RPO_MILLIONS:-}" \
+    --arg rpo_dollars "${RPO_DOLLARS:-}" \
+    --arg rpo_coverage_ratio "${RPO_COVERAGE_RATIO:-}" \
+    --arg rpo_quality_status "${RPO_QUALITY_STATUS:-}" \
     --arg rpo_yoy_pct "${RPO_YOY_PCT:-}" \
     --arg full_year_non_gaap_ni "${FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS:-}" \
+    --arg full_year_non_gaap_ni_dollars "${FULL_YEAR_NON_GAAP_NI_DOLLARS:-}" \
     --arg compute_ai_growth_pct "${COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT:-}" \
     --arg margin_inflection "$MARGIN_INFLECTION" \
     --arg sentiment_inflection "$SENTIMENT_INFLECTION" \
@@ -770,7 +912,7 @@ jq -n \
             roe: $roe,
             gross_margin: $gross_margin,
             operating_margin: $op_margin,
-            roic: $roic,
+            roa: $roa,
             revenue_yoy: $rev_yoy,
             net_income_yoy: $ni_yoy,
             revenue_q: $rev_q,
@@ -785,9 +927,13 @@ jq -n \
             latest_q_gaap_gross_margin_pct: (if $latest_q_gaap_gm != "" and $latest_q_gaap_gm != "N/A" then $latest_q_gaap_gm else null end),
             latest_q_non_gaap_gross_margin_pct: (if $latest_q_non_gaap_gm != "" and $latest_q_non_gaap_gm != "N/A" then $latest_q_non_gaap_gm else null end),
             # Optional (null for non-SaaS or when not reported in earnings):
-            remaining_performance_obligations_rpo: (if $rpo_millions != "" and $rpo_millions != "N/A" then ($rpo_millions | tonumber?) else null end),
+            remaining_performance_obligations_rpo: (if $rpo_dollars != "" and $rpo_dollars != "N/A" then ($rpo_dollars | tonumber?) else null end),
+            remaining_performance_obligations_rpo_millions: (if $rpo_millions != "" and $rpo_millions != "N/A" then ($rpo_millions | tonumber?) else null end),
+            rpo_coverage_ratio: (if $rpo_coverage_ratio != "" and $rpo_coverage_ratio != "N/A" then ($rpo_coverage_ratio | tonumber?) else null end),
+            rpo_quality_status: (if $rpo_quality_status != "" then $rpo_quality_status else "missing" end),
             rpo_yoy_pct: (if $rpo_yoy_pct != "" and $rpo_yoy_pct != "N/A" then ($rpo_yoy_pct | tonumber?) else null end),
             compute_and_ai_revenue_growth_yoy_pct: (if $compute_ai_growth_pct != "" and $compute_ai_growth_pct != "N/A" then ($compute_ai_growth_pct | tonumber?) else null end),
+            full_year_non_gaap_net_income: (if $full_year_non_gaap_ni_dollars != "" and $full_year_non_gaap_ni_dollars != "N/A" then ($full_year_non_gaap_ni_dollars | tonumber?) else null end),
             full_year_non_gaap_net_income_millions: (if $full_year_non_gaap_ni != "" and $full_year_non_gaap_ni != "N/A" then ($full_year_non_gaap_ni | tonumber?) else null end),
             margin_inflection: ($margin_inflection == "true"),
             sentiment_inflection: ($sentiment_inflection == "true"),
@@ -808,6 +954,9 @@ jq -n \
             guidance_eps_high: (if $guidance_eps_high != "" and $guidance_eps_high != "N/A" then $guidance_eps_high else null end),
             guidance_period: (if $guidance_period != "" then $guidance_period else null end),
             guidance_growth_multiple: (if $growth_multiple != "" and $growth_multiple != "N/A" then $growth_multiple else null end),
+            guidance_growth_multiple_uncapped: (if $growth_multiple_uncapped != "" and $growth_multiple_uncapped != "N/A" then $growth_multiple_uncapped else null end),
+            guidance_growth_multiple_cap: (if $growth_multiple_cap != "" and $growth_multiple_cap != "N/A" then $growth_multiple_cap else null end),
+            guidance_growth_multiple_cap_reason: (if $growth_multiple_cap_reason != "" and $growth_multiple_cap_reason != "N/A" then $growth_multiple_cap_reason else null end),
             guidance_forward_pe: (if $guidance_forward_pe != "" and $guidance_forward_pe != "N/A" then $guidance_forward_pe else null end),
             primary_valuation_anchor: (if $primary_anchor != "" and $primary_anchor != "N/A" then $primary_anchor else null end),
             primary_valuation_anchor_source: (if $primary_anchor_source != "" and $primary_anchor_source != "N/A" then $primary_anchor_source else null end),
