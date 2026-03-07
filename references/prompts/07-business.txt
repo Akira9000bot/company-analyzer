@@ -5,7 +5,7 @@ LOGIC GATES (Sector-Agnostic):
 
 * Revenue Mix: Infer segments and percent breakdown from the company profile description.
 * Pricing: Identify model from the description. Tech/SaaS: Seat-based, Usage-based, or Transactional. Manufacturing: Unit-based. Professional services: Hourly or Retainer. Utilities/Infrastructure: Regulated Rate. Retail/Consumer: Unit or Subscription. Choose the best fit; if hybrid, name the dominant form.
-* Resilience: Evaluate revenue and net income stability and cash generation. Prefer Operating Cash Flow (OCF) or FCF when available to assess whether the business actually generates cash; ROE can be misleading for companies with heavy debt or high goodwill from acquisitions. Use cash-based metrics for resilience, not ROE alone.
+* Resilience: Evaluate revenue and net income stability and cash generation. Prefer Operating Cash Flow (OCF) or FCF when available to assess whether the business actually generates cash; ROE can be misleading for companies with heavy debt or high goodwill from acquisitions. Use cash-based metrics for resilience, not ROE alone. If ROE is >25% but OCF/Net Income (or FCF/Net Income when OCF not in payload) is <1.0, flag as potential "Accounting Distortion" and set Resilience to "Medium" (do not report "Strong Health" from ROE alone).
 
 ---
 OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip REVENUE MIX, DYNAMICS, ECONOMICS, RESILIENCE, or SCALABILITY.
@@ -26,4 +26,4 @@ SCALABILITY:
 [One sentence on path to leverage or efficiency.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (REVENUE MIX:, DYNAMICS:, ECONOMICS:, RESILIENCE:, SCALABILITY:). Replace the bracketed placeholders with your analysis.
+NO intro paragraph. NO citations. Use only the section headers above (REVENUE MIX:, DYNAMICS:, ECONOMICS:, RESILIENCE:, SCALABILITY:). Replace the bracketed placeholders with your analysis. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (unit economics and resilience strength).

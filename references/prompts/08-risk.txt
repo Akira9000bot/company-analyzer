@@ -29,4 +29,4 @@ ASSESSMENT DETAILS:
 4. Competition: [Red or Yellow or Green] - [Trend: Improving or Stable or Worsening] - [Market structure evidence.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Before finishing, ensure you have written all four sections ending with the four ASSESSMENT DETAILS lines.
+NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Before finishing, ensure you have written all four sections ending with the four ASSESSMENT DETAILS lines. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (Low risk=80+, Medium=50-79, High=0-49; inverse of risk level).

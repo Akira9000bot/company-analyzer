@@ -49,4 +49,4 @@ CRITICAL FAILURE POINT:
 [Identify the single biggest structural threat/headwind in an AI-native world.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (LENSES:, TALLY:, VERDICT:, CRITICAL FAILURE POINT:). Replace the bracketed placeholders with your analysis. Keep the L1–L4 numbering and the one-sentence rationale after each lens. End with CRITICAL FAILURE POINT.
+NO intro paragraph. NO citations. Use only the section headers above (LENSES:, TALLY:, VERDICT:, CRITICAL FAILURE POINT:). Replace the bracketed placeholders with your analysis. Keep the L1–L4 numbering and the one-sentence rationale after each lens. End with CRITICAL FAILURE POINT. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (Antifragile=85+, Robust=50-84, Fragile=0-49).

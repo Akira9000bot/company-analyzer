@@ -39,4 +39,4 @@ Use: [Exact valuation method(s) from Strategic Mapping for this phase.]
 Avoid: [Exact valuation method from Strategic Mapping for this phase.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid). Your last line must start with "Avoid:" so the response is complete; do not stop generating before that line.
+NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid). Your last line must start with "Avoid:" so the response is complete; do not stop generating before that line. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (your assessment of lifecycle strength, 0=decline, 100=strong growth stage).

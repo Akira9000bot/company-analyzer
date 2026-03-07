@@ -85,17 +85,33 @@ done
 SYNTH_FILE_PROMPT="$PROMPTS_DIR/09-synthesis.txt"
 [ ! -f "$SYNTH_FILE_PROMPT" ] && { echo "ERROR: Synthesis prompt not found: $SYNTH_FILE_PROMPT" >&2; exit 1; }
 SYNTHESIS_PROMPT=$(cat "$SYNTH_FILE_PROMPT")
-# Inject numeric framework weights from config so synthesis can weigh evidence (adjust references/framework-weights.json to change)
 WEIGHTS_FILE="$(dirname "$PROMPTS_DIR")/framework-weights.json"
-if [ -f "$WEIGHTS_FILE" ]; then
-    WEIGHTS_LINE=$(jq -r 'to_entries | map("\(.key)=\(.value * 100 | floor)%") | join(", ")' "$WEIGHTS_FILE" 2>/dev/null || true)
-    [ -n "$WEIGHTS_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
-
-NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence; use when combining evidence and resolving conflicts): $WEIGHTS_LINE"
-fi
-# Inject reference date so synthesis uses current time for catalysts (avoids "Q4 2024" when we are in 2026)
 REFERENCE_DATE=$(date -u +%Y-%m-%d)
-REFERENCE_DATE_LINE="REFERENCE DATE: $REFERENCE_DATE. All VERDICT TRIGGERS (catalysts) must be expressed relative to this date—i.e. the next 2 quarters and upcoming earnings from today, not past quarters. Example: if today is March 2026, say 'Q1 2026' or 'upcoming Q1 2026 earnings,' not 'Q4 2024.'"
+
+# Compute BASE_SCORE from the 7 scored frameworks (exclude 05-sentiment)
+BASE_SCORE_VAL=""
+if [ -f "$WEIGHTS_FILE" ]; then
+    WEIGHTED_SUM="0"
+    WEIGHT_TOTAL="0"
+    SCORED_FRAMEWORKS=(01-phase 02-metrics 03-ai-moat 04-strategic-moat 06-growth 07-business 08-risk)
+    for fw_id in "${SCORED_FRAMEWORKS[@]}"; do
+        FW_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_${fw_id}.md"
+        if [ -f "$FW_FILE" ]; then
+            SCORE=$(grep -oE 'FRAMEWORK_SCORE:[[:space:]]*[0-9]+' "$FW_FILE" 2>/dev/null | tail -1 | grep -oE '[0-9]+')
+            W=$(jq -r --arg k "$fw_id" '.[$k] // 0' "$WEIGHTS_FILE" 2>/dev/null)
+            if [[ -n "$SCORE" && "$SCORE" =~ ^[0-9]+$ ]] && [[ -n "$W" && "$W" =~ ^[0-9.]+$ ]] && [ "$(echo "$W > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                WEIGHTED_SUM=$(echo "scale=4; $WEIGHTED_SUM + $SCORE * $W" | bc 2>/dev/null || echo "$WEIGHTED_SUM")
+                WEIGHT_TOTAL=$(echo "scale=4; $WEIGHT_TOTAL + $W" | bc 2>/dev/null || echo "$WEIGHT_TOTAL")
+            fi
+        fi
+    done
+    if [[ -n "$WEIGHT_TOTAL" && "$WEIGHT_TOTAL" != "0" ]] && [[ -n "$WEIGHTED_SUM" ]]; then
+        BASE_SCORE_RAW=$(echo "scale=2; $WEIGHTED_SUM / $WEIGHT_TOTAL" | bc 2>/dev/null || echo "")
+        if [[ -n "$BASE_SCORE_RAW" && "$BASE_SCORE_RAW" =~ ^[0-9.]+$ ]]; then
+            BASE_SCORE_VAL=$(echo "scale=0; $BASE_SCORE_RAW / 1" | bc 2>/dev/null || echo "")
+        fi
+    fi
+fi
 
 # Inject valuation anchors from data so synthesis uses the conservative primary anchor, not a lagging mean target
 PRICE_LINE=""
@@ -188,18 +204,45 @@ if [ -f "$DATA_FILE" ]; then
         CHEAP_DEFINITION_LINE="PHASE 5 'CHEAP' DEFINITION (Step 4b only): 'Cheap' means strictly: current price is at least 15% below the conservative primary anchor (i.e. discount ≥ 15%). A 2% or 5% discount is NOT Cheap; do not treat small discounts as Cheap."
     fi
 fi
-SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
-$REFERENCE_DATE_LINE"
-[ -n "$PRICE_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+# Build injection block at top of prompt (BASE_SCORE, GUARDRAIL DATA, REFERENCE DATE, then weights/price/cheap)
+GUARDRAIL_COMPACT=""
+[ -n "$ROIC_PCT" ] && [ "$ROIC_PCT" != "null" ] && GUARDRAIL_COMPACT="${GUARDRAIL_COMPACT}roic_pct: ${ROIC_PCT}"
+[ -n "$ROA_PCT" ] && [ "$ROA_PCT" != "null" ] && { [ -n "$GUARDRAIL_COMPACT" ] && GUARDRAIL_COMPACT="$GUARDRAIL_COMPACT, "; GUARDRAIL_COMPACT="${GUARDRAIL_COMPACT}roa_pct: ${ROA_PCT}"; }
+[ -n "$CURRENT_PRICE" ] && [ "$CURRENT_PRICE" != "null" ] && { [ -n "$GUARDRAIL_COMPACT" ] && GUARDRAIL_COMPACT="$GUARDRAIL_COMPACT, "; GUARDRAIL_COMPACT="${GUARDRAIL_COMPACT}current_price: ${CURRENT_PRICE}"; }
+[ -n "$REV_Q_YOY" ] && [ "$REV_Q_YOY" != "N/A" ] && { [ -n "$GUARDRAIL_COMPACT" ] && GUARDRAIL_COMPACT="$GUARDRAIL_COMPACT, "; GUARDRAIL_COMPACT="${GUARDRAIL_COMPACT}revenue_q_yoy_pct: ${REV_Q_YOY}"; }
+[ -z "$REV_Q_YOY" ] && [ -n "$REV_YOY" ] && [ "$REV_YOY" != "N/A" ] && { [ -n "$GUARDRAIL_COMPACT" ] && GUARDRAIL_COMPACT="$GUARDRAIL_COMPACT, "; GUARDRAIL_COMPACT="${GUARDRAIL_COMPACT}revenue_yoy_pct: ${REV_YOY}"; }
+[ -n "$GUARDRAIL_COMPACT" ] && GUARDRAIL_COMPACT="GUARDRAIL DATA: { $GUARDRAIL_COMPACT }"
+
+INJECTION_TOP=""
+[ -n "$BASE_SCORE_VAL" ] && INJECTION_TOP="BASE_SCORE: $BASE_SCORE_VAL"
+[ -n "$GUARDRAIL_COMPACT" ] && { [ -n "$INJECTION_TOP" ] && INJECTION_TOP="$INJECTION_TOP
+$GUARDRAIL_COMPACT"; [ -z "$INJECTION_TOP" ] && INJECTION_TOP="$GUARDRAIL_COMPACT"; }
+[ -n "$INJECTION_TOP" ] && INJECTION_TOP="$INJECTION_TOP
+REFERENCE DATE: $REFERENCE_DATE"
+[ -z "$INJECTION_TOP" ] && INJECTION_TOP="REFERENCE DATE: $REFERENCE_DATE"
+if [ -f "$WEIGHTS_FILE" ]; then
+    WEIGHTS_LINE=$(jq -r 'to_entries | map("\(.key)=\(.value * 100 | floor)%") | join(", ")' "$WEIGHTS_FILE" 2>/dev/null || true)
+    [ -n "$WEIGHTS_LINE" ] && INJECTION_TOP="$INJECTION_TOP
+
+NUMERIC FRAMEWORK WEIGHTS (total 100% of verdict influence): $WEIGHTS_LINE"
+fi
+[ -n "$BASE_SCORE_VAL" ] && INJECTION_TOP="$INJECTION_TOP
+
+(Use injected BASE_SCORE in Step 1; do not recalculate. VERDICT TRIGGERS must be relative to REFERENCE DATE above.)"
+[ -n "$PRICE_LINE" ] && INJECTION_TOP="$INJECTION_TOP
 
 $PRICE_LINE"
-[ -n "$GUARDRAIL_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+[ -n "$GUARDRAIL_LINE" ] && INJECTION_TOP="$INJECTION_TOP
 
 $GUARDRAIL_LINE"
-[ -n "$CHEAP_DEFINITION_LINE" ] && SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
+[ -n "$CHEAP_DEFINITION_LINE" ] && INJECTION_TOP="$INJECTION_TOP
 
 $CHEAP_DEFINITION_LINE"
+
+SYNTHESIS_PROMPT="$INJECTION_TOP
+
+$SYNTHESIS_PROMPT"
 FULL_SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 === 8 FRAMEWORK ANALYSES ===

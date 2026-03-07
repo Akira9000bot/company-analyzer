@@ -28,4 +28,4 @@ THREAT:
 [One or two sentences: primary risk to moat durability.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Keep answers brief so you always complete all five sections; end with THREAT.
+NO intro paragraph. NO citations. Use only the section headers above. Replace the bracketed placeholders with your analysis. Keep answers brief so you always complete all five sections; end with THREAT. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (Wide=85+, Narrow=50-84, None=0-49).

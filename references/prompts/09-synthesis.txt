@@ -7,21 +7,16 @@ This framework is growth-biased and may underrate stable value/income names or m
 
 FRAMEWORK WEIGHTS:
 If a "NUMERIC FRAMEWORK WEIGHTS" line is injected, use those weights. Otherwise, use these defaults:
-- 01-phase: 20%
-- 02-metrics: 20%
-- 08-risk: 20%
-- 03-ai-moat: 15%
-- 04-strategic-moat: 6.25%
-- 05-sentiment: 6.25%
-- 06-growth: 6.25%
-- 07-business: 6.25%
+- Fixed Core (60%): 01-phase 20%, 02-metrics 20%, 08-risk 20%. Non-negotiable; lifecycle, cash flow/growth, and risk protect principal.
+- Variable Moat (25%): 03-ai-moat 12.5%, 04-strategic-moat 12.5%. Balanced so traditional moats (brand, railroad, etc.) carry weight in non-tech sectors.
+- Execution Satellite (15%): 06-growth 7.5%, 07-business 7.5%.
+- 05-sentiment: 0% weight. Sentiment is a Filter, not a score component. It is used as the Valuation Circuit Breaker (Step 4); do not include it in the base weighted score. This prevents a "popular" stock from scoring high solely because analysts like it.
+Base score = weighted sum of the 7 frameworks with non-zero weight (01, 02, 03, 04, 06, 07, 08). Exclude 05-sentiment from the score; apply it only as a filter in Step 4.
 
 ORDER OF OPERATIONS (THE RULES)
 
-STEP 1: Calculate the Base Score
-Logic: Calculate a 0-100 weighted score from the 8 frameworks. If frameworks are missing, normalize using:
-(Sum of achieved weighted scores / Sum of available weights) * 100
-State all omissions in WEIGHTED SCORECARD.
+STEP 1: Base Score (use injected value; do not recalculate)
+When BASE_SCORE is injected at the top of this prompt (computed by the pipeline from the 7 framework scores and weights), use that number. Do not perform weighted math yourself—LLMs are error-prone at multi-variable weighted sums. Apply all adjustments and vetoes (Steps 2–5) to the injected BASE_SCORE. If BASE_SCORE is not injected, infer tier from framework evidence and state in WEIGHTED SCORECARD that score was not precomputed. List each framework and its contribution in WEIGHTED SCORECARD for transparency; the arithmetic is done by the script.
 
 Mapping:
 - 85-100 = STRONG BUY
@@ -78,6 +73,11 @@ Breaker Rules:
 Expensive + Decelerating Growth Cap:
 - If 05-sentiment classifies valuation as Expensive AND 02-metrics shows decelerating growth, the final verdict must be capped at HOLD.
 
+Sentiment Gatekeeper (05-Sentiment as Filter—three circuit breakers; apply after base score and valuation breaker):
+1. Bull Trap Breaker: If 05-sentiment valuation is Expensive AND (Investors are Bearish OR Media is Negative), cap the final verdict at HOLD. Rationale: You are "fighting the tape"; do not buy a high-quality name in a "falling knife" phase. Exception—Fundamental Dominance: If 02-metrics shows >20% YoY revenue growth AND 07-business indicates High Resilience, do NOT apply the Bull Trap cap; ignore the "Media is Negative" signal so you are not shaken out of a strong turnaround by noisy headlines.
+2. Contrarian Upgrade: If the base score is >75 (high quality) AND 05-sentiment valuation is Cheap AND Media is Negative, upgrade a BUY to STRONG BUY. Rationale: "Be greedy when others are fearful"—high-quality business temporarily punished by headline or sector sell-off.
+3. Euphoria Penalty: If 05-sentiment valuation is Expensive AND (Analysts or Investors) show High confidence, downgrade a STRONG BUY to BUY. Rationale: DCA rather than "Deploy Capital Immediately"; avoid entering at a local blow-off top.
+
 Institutional Override:
 - Treat institutional ownership as supportive only if institutional ownership is at least 70%, or if 05-sentiment explicitly states institutional accumulation/support.
 - If institutional ownership is supportive, do NOT downgrade based solely on a premium to a lagging mean target.
@@ -125,7 +125,7 @@ VERDICT TRIGGERS:
 - If STRONG SELL: Catalyst for re-evaluation: [Condition required before the asset can be reconsidered.] Trigger to upgrade: [Condition that would allow a re-look.]
 
 WEIGHTED SCORECARD:
-[List each framework, its score, its weight, and its weighted contribution. Show total weighted score, normalized score if needed, and the tier before later adjustments. State any omitted frameworks.]
+[When BASE_SCORE was injected, use it as the total; list each framework, its score (from FRAMEWORK_SCORE when present), its weight, and weighted contribution for transparency. Tier before later adjustments. State any omitted frameworks. Do not recalculate the total—the pipeline computed it.]
 
 NARRATIVE FLIP RADAR:
 Status: [No flip detected | Early signals | FLIP IMMINENT]
@@ -136,6 +136,7 @@ Seat-based SaaS dependency: [YES/NO + detail]
 AI moat concern: [YES/NO + detail]
 Capital efficiency concern: [YES/NO + detail. For Phase 4/5, state which metric was used (ROIC if present, else ROA fallback) and whether it meets the bar. ROIC ≥8% or ROA ≥6% = STRONG BUY allowed; 4–8% ROIC = cap BUY only if valuation Cheap/Discounted else cap HOLD; ROIC ≤4% or ROA <3% = cap HOLD. If ROIC was missing (N/A, null, or empty) and ROA was used, say "ROIC missing; used ROA fallback."]
 Valuation circuit breaker applied: [YES/NO + detail]
+Sentiment gatekeeper applied: [YES/NO + which: Bull Trap cap HOLD, Contrarian upgrade to STRONG BUY, or Euphoria downgrade STRONG BUY→BUY. If none, say NO.]
 Phase 5 maturity cap applied: [YES/NO + detail. If Phase 5 and growth <12% and ROA 3–6%, state that verdict was capped at BUY.]
 Structural veto applied: [YES/NO + detail]
 
@@ -146,7 +147,7 @@ INVESTMENT THESIS:
 [One-sentence bull or bear case.]
 
 ADJUSTMENTS:
-[Sequential list of Step 1, 2, 3, 4, 4b, and 5 actions in order: base score and tier, Phase 5 dividend upgrade if any, narrative/SaaS/capital-efficiency, valuation breaker, Phase 5 maturity cap if applied, structural veto. Include every upgrade, downgrade, cap, bypass, and caution note.]
+[Sequential list of Step 1, 2, 3, 4, Sentiment Gatekeeper (Bull Trap/Contrarian/Euphoria if applied), 4b, and 5 actions in order: base score and tier, Phase 5 dividend upgrade if any, narrative/SaaS/capital-efficiency, valuation breaker, sentiment gatekeeper if applied, Phase 5 maturity cap if applied, structural veto. Include every upgrade, downgrade, cap, bypass, and caution note.]
 
 RULES:
 - No intro paragraph.
@@ -158,4 +159,5 @@ RULES:
 - Do NOT put a Price Target line inside VERDICT. Put all valuation numbers inside VALUATION ANCHORS.
 - Phase 4/5 capital efficiency: When ROIC is supplied, apply Hard Veto (STRONG BUY only if ROIC ≥ 8%; 4–8% cap BUY only if valuation Cheap/Discounted, else cap HOLD; ≤4% cap HOLD). When ROIC is missing (N/A, null, or empty), use ROA fallback (STRONG BUY ≥ 6%; 3–6% cap BUY; <3% cap HOLD)—do not cap at HOLD solely because ROIC is missing. Do not metric shop.
 - Expensive + decelerating: If 05-sentiment is Expensive AND 02-metrics shows decelerating growth, cap verdict at HOLD.
+- Sentiment Gatekeeper: (1) Expensive + Bearish/Negative → cap HOLD (Bull Trap); exception: if 02-metrics >20% YoY and 07-business High Resilience, do not apply Bull Trap (Fundamental Dominance). (2) Base >75 + Cheap + Media Negative → upgrade BUY to STRONG BUY (Contrarian). (3) Expensive + High confidence → downgrade STRONG BUY to BUY (Euphoria).
 - Phase 5 maturity: STRONG BUY only if (i) revenue growth ≥12% (no 15% discount required; still need Fair per Step 4) OR (ii) capital efficiency meets bar and valuation Cheap (15% below anchor). Paths independent; otherwise cap at BUY.
