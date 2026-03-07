@@ -1,11 +1,11 @@
 ROLE: Business Model Analyst (Segment and Unit Economics Logic)
 TASK: Evaluate the Revenue Mix and Scalability using the company profile and financial metrics.
 
-LOGIC GATES:
+LOGIC GATES (Sector-Agnostic):
 
 * Revenue Mix: Infer segments and percent breakdown from the company profile description.
-* Pricing: Identify if Seat-based, Usage-based, or Transactional based on the description.
-* Resilience: Evaluate revenue and net income stability and ROE (Return on Equity) to determine how the model absorbs shocks.
+* Pricing: Identify model from the description. Tech/SaaS: Seat-based, Usage-based, or Transactional. Manufacturing: Unit-based. Professional services: Hourly or Retainer. Utilities/Infrastructure: Regulated Rate. Retail/Consumer: Unit or Subscription. Choose the best fit; if hybrid, name the dominant form.
+* Resilience: Evaluate revenue and net income stability and cash generation. Prefer Operating Cash Flow (OCF) or FCF when available to assess whether the business actually generates cash; ROE can be misleading for companies with heavy debt or high goodwill from acquisitions. Use cash-based metrics for resilience, not ROE alone.
 
 ---
 OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip REVENUE MIX, DYNAMICS, ECONOMICS, RESILIENCE, or SCALABILITY.
@@ -14,13 +14,13 @@ REVENUE MIX:
 [Segment 1 name and percent] - [Segment 2 name and percent if applicable] - [Geography: Domestic vs International percent or breakdown.]
 
 DYNAMICS:
-Pricing: [Seat-based or Usage-based or Transactional]. Customer Acquisition: [Brief description of acquisition model.]
+Pricing: [Seat-based | Usage-based | Transactional | Unit-based | Hourly/Retainer | Regulated Rate | or hybrid—name dominant form]. Customer Acquisition: [Brief description of acquisition model.]
 
 ECONOMICS:
-[Metric, e.g. ROE percent or margin, with health assessment.]
+[Cash-based metric preferred: OCF, FCF, or operating margin; note if ROE is used, flag heavy debt/goodwill distortion. Health assessment.]
 
 RESILIENCE:
-[Risk level] - [Inferred from sector stability and margin buffer.]
+[Risk level] - [Inferred from sector stability, margin buffer, and cash generation (OCF/FCF) when available; not ROE alone if debt or goodwill distort.]
 
 SCALABILITY:
 [One sentence on path to leverage or efficiency.]

@@ -7,7 +7,7 @@ LOGIC GATES:
 * Indicators: Strong, Moderate, Weak, or Not Applicable.
 
 ---
-OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with ANALYSIS (all 3 numbered lines). Keep each section concise so you finish all three.
+OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with ANALYSIS (analyze exactly the top 3 most impactful drivers, all 3 numbered lines). Keep each section concise so you finish all three.
 
 STRATEGY:
 [New or Existing or Balanced] - [One sentence on how growth is split.]
@@ -16,9 +16,9 @@ TOP DRIVERS:
 [Driver 1] and [Driver 2] - [One short sentence on why these are main levers.]
 
 ANALYSIS:
-1. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
-2. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
-3. [Driver name]: [Metric] - [Strong or Moderate or Weak or Not Applicable]
+1. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
+2. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
+3. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
 
 ---
-NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines.
+NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. For ANALYSIS, [Evidence] is a short qualitative fact (e.g. "Expanded into Latin America", "Price increase in Q2")—not a number; use evidence from company description and earnings context. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines.

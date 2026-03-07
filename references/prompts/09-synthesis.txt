@@ -40,7 +40,7 @@ Narrative Flip:
 
 ROIC Screener Rule (by phase):
 - Phase 1 & 2 (Disruptors): Mute ROIC completely. Do not apply any ROIC/ROA veto or cap. Score on revenue growth and margin inflection only.
-- Phase 3 (Inflection): If FCF is positive AND margin_inflection is true, ignore trailing ROIC (do not apply capital-efficiency veto). Otherwise apply the same bar as Phase 4/5 using whichever of ROIC or ROA is available.
+- Phase 3 (Inflection): If FCF is positive AND margin_inflection is true, ignore trailing ROIC (do not apply capital-efficiency veto). If Phase 3 and (FCF is negative OR margin_inflection is false), apply the Phase 4/5 ROIC/ROA bar (same as mature)—no ambiguity: only when both FCF positive and margin_inflection true do you ignore ROIC.
 - Phase 4 & 5 (Mature): Apply the ROIC Hard Veto when ROIC is present: require ROIC > 8% for STRONG BUY. ROIC 4–8% cap at BUY only if valuation is Cheap/Discounted (price ≥15% below primary anchor); otherwise cap HOLD—do not pay a premium for mediocre capital efficiency. ROIC ≤ 4% cap at HOLD. If ROIC is missing (e.g. API did not return balance sheet), do NOT cap at HOLD for missing—fall back to ROA: STRONG BUY ≥ 6%, cap BUY 3–6%, cap HOLD < 3%. Do not let a blank API field ruin the analysis.
 
 Capital Efficiency Guardrail (implementation):
@@ -48,7 +48,7 @@ Capital Efficiency Guardrail (implementation):
 - When roic_pct is provided in GUARDRAIL DATA (or ROIC is clearly stated in framework outputs), use ROIC for Phase 4/5 per the Hard Veto above. ROIC 4–8%: BUY only if valuation is Cheap/Discounted; otherwise cap HOLD. ROIC ≤ 4%: cap HOLD. ROIC is the preferred capital-efficiency metric (avoids goodwill distortion vs ROA).
 - When ROIC is missing (N/A, null, or empty), use `roa_pct` as the fallback. For Phase 4 or Phase 5 only: STRONG BUY requires ROA ≥ 6%; ROA 3–6% cap at BUY; ROA < 3% cap at HOLD. Do not treat missing ROIC as a veto—always fall back to ROA when ROIC is absent. Do not "metric shop" to justify a buy.
 - If the applicable metric (ROIC or ROA) < 1% AND the company is mature, acquisition-heavy, or heavily dependent on capital return optics, treat as a major structural warning and downgrade by one tier unless already capped more severely.
-- Do NOT use this guardrail for Phase 1–2 (mute) or Phase 3 when FCF positive and margin_inflection true (ignore ROIC).
+- Do NOT use this guardrail for Phase 1–2 (mute) or for Phase 3 only when both FCF positive and margin_inflection true (ignore ROIC). For Phase 3 when FCF is negative OR margin_inflection is false, apply the Phase 4/5 bar.
 
 Seat-Based SaaS Penalty:
 - If more than 50% of revenue is from seats/licenses/users AND 03-ai-moat is "Fragile" or "Neutral", apply a -20% penalty to fair value.
@@ -63,7 +63,7 @@ Anchors:
 - Use the more conservative primary anchor from `internal_guidance_target` and `analyst_high_target` (the lower of the two when both exist).
 - Treat `analyst_mean_target` as lagging context only.
 - If no primary anchor is available, treat valuation as Fair for this step and report missing anchors clearly in `VALUATION ANCHORS`.
-- If no primary anchor is available, STRONG BUY is NOT allowed.
+- If no primary anchor is available, STRONG BUY is NOT allowed—except for Phase 1 or 2 (disruptors), where STRONG BUY is permitted when anchors are missing (early-stage companies often have no internal guidance or reliable analyst targets).
 
 Constraint:
 - A STRONG BUY is only allowed if valuation is Fair or Cheap on the conservative primary anchor.
@@ -75,6 +75,9 @@ Breaker Rules:
   - If margins are expanding and no narrative flip is detected, do NOT apply an automatic downgrade. Keep the tier and note caution in ADJUSTMENTS.
   - Otherwise, downgrade by one tier and explain the reason in ADJUSTMENTS.
 
+Expensive + Decelerating Growth Cap:
+- If 05-sentiment classifies valuation as Expensive AND 02-metrics shows decelerating growth, the final verdict must be capped at HOLD.
+
 Institutional Override:
 - Treat institutional ownership as supportive only if institutional ownership is at least 70%, or if 05-sentiment explicitly states institutional accumulation/support.
 - If institutional ownership is supportive, do NOT downgrade based solely on a premium to a lagging mean target.
@@ -82,7 +85,8 @@ Institutional Override:
 
 STEP 4b: Phase 5 Maturity Cap (Avoid Score Inflation on Stable Value Names)
 - For Phase 5 (Capital-Return) companies only: STRONG BUY is permitted only if (i) the phase/growth frameworks indicate revenue growth ≥12%, OR (ii) capital efficiency meets the bar (ROIC ≥ 8% when ROIC is supplied, else ROA ≥ 6%) and valuation is Cheap. Otherwise cap the maximum verdict at BUY even if the weighted score is 85+.
-- Definition of "Cheap" for (ii): Strictly, current price must be at least 15% below the conservative primary anchor (i.e. discount ≥ 15%). A 2% or 5% discount is NOT Cheap; do not treat small discounts as Cheap.
+- Paths (i) and (ii) are independent: if (i) is satisfied (growth ≥12%), STRONG BUY does not require the 15% discount; valuation must still be Fair or better per Step 4. The 15% "Cheap" definition applies only to path (ii).
+- Definition of "Cheap" for (ii) only: Strictly, current price must be at least 15% below the conservative primary anchor (i.e. discount ≥ 15%). A 2% or 5% discount is NOT Cheap; do not treat small discounts as Cheap.
 - Rationale: A Phase 5 company with single-digit or low-double-digit growth (e.g. 9–11%) is a "stable value" or "capital return" story, not an "elite growth" story. Reserve STRONG BUY ("deploy capital immediately") for Phase 5 names that show either strong growth or strong capital efficiency plus genuinely cheap valuation; otherwise output BUY ("dollar-cost average") to avoid over-conviction on dead-money risk.
 
 STEP 5: Apply the "Structural Veto" (Final Override)
@@ -153,4 +157,5 @@ RULES:
 - If valuation is somewhat stretched but not enough for a full downgrade, keep the current tier and explain the caution in ADJUSTMENTS.
 - Do NOT put a Price Target line inside VERDICT. Put all valuation numbers inside VALUATION ANCHORS.
 - Phase 4/5 capital efficiency: When ROIC is supplied, apply Hard Veto (STRONG BUY only if ROIC ≥ 8%; 4–8% cap BUY only if valuation Cheap/Discounted, else cap HOLD; ≤4% cap HOLD). When ROIC is missing (N/A, null, or empty), use ROA fallback (STRONG BUY ≥ 6%; 3–6% cap BUY; <3% cap HOLD)—do not cap at HOLD solely because ROIC is missing. Do not metric shop.
-- Phase 5 maturity: STRONG BUY only if revenue growth ≥12% or (capital efficiency meets bar and Cheap). "Cheap" means strictly: price at least 15% below the conservative primary anchor (discount ≥ 15%); otherwise cap at BUY.
+- Expensive + decelerating: If 05-sentiment is Expensive AND 02-metrics shows decelerating growth, cap verdict at HOLD.
+- Phase 5 maturity: STRONG BUY only if (i) revenue growth ≥12% (no 15% discount required; still need Fair per Step 4) OR (ii) capital efficiency meets bar and valuation Cheap (15% below anchor). Paths independent; otherwise cap at BUY.
