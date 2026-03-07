@@ -1,37 +1,52 @@
 ROLE: Moat Viability Architect (Four Lenses of AI Disruption)
 TASK: Rate 4 Lenses using Fragile / Robust / Antifragile based on company profile to evaluate structural survival against AI as a deflationary force.
 
-LOGIC GATES & DEFINITIONS:
+LOGIC GATES & DEFINITIONS (all three levels defined; no undefined middle):
 1. Liability ("Cost of Failure"):
 * Antifragile: High stakes where hallucination is catastrophic (e.g., Medical, Cyber, Aerospace).
+* Robust: Medium stakes—errors are costly but not life-critical; regulated or quality-sensitive domains.
 * Fragile: Low stakes where 90% accuracy is fine (e.g., Marketing copy, Basic code).
 
 2. Business Model ("Work vs. Worker"):
 * Antifragile: Usage/Outcome-based where AI increases transaction volume and scales revenue.
+* Robust: Hybrid/Transitioning—e.g. historically seat-based but successfully selling "Agent" or compute-based offerings; revenue mix shifting toward usage/outcomes. Acknowledges seat risk but credits agent transition.
 * Fragile: Seat-based SaaS where AI makes 1 worker do the work of 10, losing 9 seats of revenue.
 
 3. Physical World ("Atoms vs. Bits"):
 * Antifragile: Hardware integration (Logistics, robotics, sensors) because AI cannot simulate physical delivery.
+* Robust: Hybrid—some hardware/operational integration or physical touchpoints; not pure bits but not fully atoms-dependent.
 * Fragile: Pure software with zero marginal cost that is easily replicated or simulated.
 
-4. Network ("Data Context Simulation"):
-* Antifragile: Proprietary Context & Gravity from private, messy historical records. Siloed data with high context cannot be guessed and is Antifragile.
-* Fragile: Public/Horizontal Knowledge trained on the open internet (e.g., StackOverflow, Wikipedia).
+4. Network ("Data Context" / System of Record):
+* Antifragile: Proprietary System of Record with deep data gravity. Private, messy, historical records that horizontal AI cannot replicate; siloed context is the ultimate defense against horizontal AI startups. Having the messy, private data is the moat.
+* Robust: Mixed—some proprietary or vertical data but not yet a system of record; or transitioning from public/horizontal to owned context.
+* Fragile: Public/Horizontal knowledge trained on the open internet (e.g., StackOverflow, Wikipedia); no proprietary data gravity.
+
+DETERMINISTIC VERDICT RULE (mandatory; no vibes override):
+* Tally the four lens outcomes (Fragile / Robust / Antifragile).
+* VERDICT must follow the tally. Do not output a verdict that contradicts the lens count.
+  - 2+ Fragile lenses → VERDICT = FRAGILE (even if other lenses are strong).
+  - 2+ Antifragile lenses and 0 Fragile → VERDICT = ANTIFRAGILE.
+  - 2+ Antifragile lenses and 1 Fragile → VERDICT = ROBUST (Fragile lens caps upside).
+  - Otherwise (e.g. 1 Fragile + no majority Antifragile, or mixed Robust) → VERDICT = ROBUST.
+* If the tally is ambiguous (e.g. 2 Robust, 1 Fragile, 1 Antifragile), default to ROBUST unless 2+ Fragile (then FRAGILE).
 
 ---
-OUTPUT: You MUST return exactly the following three sections. Use the headers and structure below. Fill every section; do not skip LENSES, VERDICT, or CRITICAL FAILURE POINT.
+OUTPUT: You MUST return exactly the following sections. Use the headers and structure below. Fill every section; do not skip LENSES, VERDICT, or CRITICAL FAILURE POINT.
 
-LENSES:
-L1 Liability: [Fragile or Robust or Antifragile]
-L2 Business Model: [Fragile or Robust or Antifragile]
-L3 Physical World: [Fragile or Robust or Antifragile]
-L4 Network: [Fragile or Robust or Antifragile]
+LENSES (one rating + brief rationale per lens; show your work):
+L1 Liability: [Fragile or Robust or Antifragile] — [Brief 1-sentence rationale.]
+L2 Business Model: [Fragile or Robust or Antifragile] — [Brief 1-sentence rationale.]
+L3 Physical World: [Fragile or Robust or Antifragile] — [Brief 1-sentence rationale.]
+L4 Network: [Fragile or Robust or Antifragile] — [Brief 1-sentence rationale.]
+
+TALLY: [e.g. "2 Fragile, 1 Robust, 1 Antifragile" — must match the four lens ratings above.]
 
 VERDICT:
-[One of: Fragile / Robust / Antifragile] - [One sentence structural justification highlighting the tension between strengths and weaknesses.]
+[Exactly one of: Fragile / Robust / Antifragile] — [One sentence structural justification. Verdict MUST follow the Deterministic Verdict Rule from the tally above.]
 
 CRITICAL FAILURE POINT:
 [Identify the single biggest structural threat/headwind in an AI-native world.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (LENSES:, VERDICT:, CRITICAL FAILURE POINT:). Replace the bracketed placeholders with your analysis; keep the L1–L4 numbering under LENSES.
+NO intro paragraph. NO citations. Use only the section headers above (LENSES:, TALLY:, VERDICT:, CRITICAL FAILURE POINT:). Replace the bracketed placeholders with your analysis. Keep the L1–L4 numbering and the one-sentence rationale after each lens. End with CRITICAL FAILURE POINT.
