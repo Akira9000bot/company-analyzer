@@ -158,19 +158,30 @@ if [ -f "$DATA_FILE" ]; then
         fi
         PRICE_LINE="$PRICE_LINE Use the lower of analyst high target and internal guidance target as the primary valuation anchor; use analyst mean only as lagging context."
     fi
-    # Inject ROA and revenue growth for Phase 4/5 guardrails (capital-efficiency and maturity cap)
+    # Inject ROA, ROIC (when present), and revenue growth for Phase 4/5 guardrails (capital-efficiency and maturity cap)
     ROA_PCT=$(jq -r '.financial_metrics.roa // empty' "$DATA_FILE" 2>/dev/null | sed 's/%//')
+    ROIC_PCT=$(jq -r '.financial_metrics.roic // empty' "$DATA_FILE" 2>/dev/null | sed 's/%//')
     REV_YOY=$(jq -r '.financial_metrics.revenue_yoy // empty' "$DATA_FILE" 2>/dev/null)
     REV_Q_YOY=$(jq -r '.financial_metrics.revenue_q_yoy // empty' "$DATA_FILE" 2>/dev/null)
     GUARDRAIL_LINE=""
-    if [[ -n "$ROA_PCT" && "$ROA_PCT" != "null" ]]; then
-        GUARDRAIL_LINE="GUARDRAIL DATA: roa_pct: ${ROA_PCT}"
+    # Only treat ROIC as "present" when not missing: exclude empty, "null", and "N/A" (avoids zero-vs-null trap; 0 is a valid value)
+    ROIC_PRESENT="0"
+    if [[ -n "$ROIC_PCT" && "$ROIC_PCT" != "null" && "$ROIC_PCT" != "N/A" ]]; then
+        ROIC_PRESENT="1"
+    fi
+    if [[ -n "$ROA_PCT" && "$ROA_PCT" != "null" ]] || [[ "$ROIC_PRESENT" = "1" ]]; then
+        GUARDRAIL_LINE="GUARDRAIL DATA:"
+        [[ -n "$ROA_PCT" && "$ROA_PCT" != "null" ]] && GUARDRAIL_LINE="$GUARDRAIL_LINE roa_pct: ${ROA_PCT}"
+        if [[ "$ROIC_PRESENT" = "1" ]]; then
+            [[ -n "$ROA_PCT" && "$ROA_PCT" != "null" ]] && GUARDRAIL_LINE="$GUARDRAIL_LINE,"
+            GUARDRAIL_LINE="$GUARDRAIL_LINE roic_pct: ${ROIC_PCT}"
+        fi
         if [[ -n "$REV_Q_YOY" && "$REV_Q_YOY" != "null" && "$REV_Q_YOY" != "N/A" ]]; then
             GUARDRAIL_LINE="$GUARDRAIL_LINE, revenue_q_yoy_pct: ${REV_Q_YOY}"
         elif [[ -n "$REV_YOY" && "$REV_YOY" != "null" && "$REV_YOY" != "N/A" ]]; then
             GUARDRAIL_LINE="$GUARDRAIL_LINE, revenue_yoy_pct: ${REV_YOY}"
         fi
-        GUARDRAIL_LINE="$GUARDRAIL_LINE. Use for Phase 4/5 capital-efficiency (STRONG BUY only if roa_pct ≥ 6) and Phase 5 maturity cap (STRONG BUY only if revenue growth ≥ 12% or roa_pct ≥ 6 and Cheap)."
+        GUARDRAIL_LINE="$GUARDRAIL_LINE. Phase 4/5 ROIC Hard Veto: when roic_pct is present use ROIC (STRONG BUY ≥ 8%; 4-8% cap BUY only if valuation Cheap/Discounted, else cap HOLD; ≤4% cap HOLD). Treat roic_pct as missing (use ROA fallback) only when it is N/A, null, or empty—do not treat the literal 0 as missing. When roic_pct is missing, fall back to roa_pct (STRONG BUY ≥ 6%, cap BUY 3-6%, cap HOLD <3%). Phase 5 maturity cap: STRONG BUY only if revenue growth ≥ 12% or (capital-efficiency metric ≥ threshold and Cheap)."
     fi
     # Strict "Cheap" definition for Step 4b: price must be at least 15% below primary anchor
     if [ -n "$PRIMARY_ANCHOR" ] && [ "$PRIMARY_ANCHOR" != "null" ] && [ "$PRIMARY_ANCHOR" != "N/A" ]; then

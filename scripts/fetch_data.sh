@@ -95,9 +95,9 @@ CRUMB=$(curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://query1.
 echo "🔍 Fetching Yahoo Finance data..."
 curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" "https://query2.finance.yahoo.com/v7/finance/quote?symbols=${TICKER_UPPER}&crumb=${CRUMB}" > "${Y_RAW}_quote"
 
-# Enriched modules: annual + quarterly income/cashflow, plus earningsTrend for guidance/revisions
+# Enriched modules: annual + quarterly income/cashflow, balanceSheet for ROIC, plus earningsTrend for guidance/revisions
 curl -s -b "$COOKIE_FILE" -H "User-Agent: $YAHOO_AGENT" \
-    "https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER_UPPER}?modules=earningsHistory,earningsTrend,assetProfile,defaultKeyStatistics,majorHoldersBreakdown,financialData,incomeStatementHistory,incomeStatementHistoryQuarterly,cashflowStatementHistory,cashflowStatementHistoryQuarterly&crumb=${CRUMB}" \
+    "https://query2.finance.yahoo.com/v10/finance/quoteSummary/${TICKER_UPPER}?modules=earningsHistory,earningsTrend,assetProfile,defaultKeyStatistics,majorHoldersBreakdown,financialData,incomeStatementHistory,incomeStatementHistoryQuarterly,cashflowStatementHistory,cashflowStatementHistoryQuarterly,balanceSheetHistory,balanceSheetHistoryQuarterly&crumb=${CRUMB}" \
     > "${Y_RAW}_summary"
 log_trace "INFO" "fetch_data" "Yahoo quoteSummary OK"
 
@@ -295,6 +295,44 @@ if jq -e '.quoteSummary.result[0].cashflowStatementHistory.cashflowStatements' "
     fi
 fi
 
+# ROIC (Return on Invested Capital): NOPAT / Invested Capital, using income statement [0] and balance sheet [0]
+# Tax rate = Tax Provision / Pretax Income; NOPAT = Operating Income * (1 - Tax Rate); Invested Capital = Total Assets - Current Liabilities - Cash
+# Yahoo uses balanceSheetStatements (not balanceSheetHistory); prefer annual, fallback to quarterly.
+ROIC="N/A"
+BS_JSON=""
+if jq -e '.quoteSummary.result[0].balanceSheetHistory.balanceSheetStatements[0]' "${Y_RAW}_summary" >/dev/null 2>&1; then
+    BS_JSON=$(jq -c '.quoteSummary.result[0].balanceSheetHistory.balanceSheetStatements[0]' "${Y_RAW}_summary" 2>/dev/null)
+elif jq -e '.quoteSummary.result[0].balanceSheetHistoryQuarterly.balanceSheetStatements[0]' "${Y_RAW}_summary" >/dev/null 2>&1; then
+    BS_JSON=$(jq -c '.quoteSummary.result[0].balanceSheetHistoryQuarterly.balanceSheetStatements[0]' "${Y_RAW}_summary" 2>/dev/null)
+fi
+if [ -n "$BS_JSON" ] && jq -e '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0]' "${Y_RAW}_summary" >/dev/null 2>&1; then
+    TA=$(echo "$BS_JSON" | jq -r '.totalAssets.raw // empty' 2>/dev/null)
+    CL=$(echo "$BS_JSON" | jq -r '.totalCurrentLiabilities.raw // .currentLiabilities.raw // empty' 2>/dev/null)
+    CASH=$(echo "$BS_JSON" | jq -r '.cash.raw // .cashAndCashEquivalents.raw // 0' 2>/dev/null)
+    OP_INC_IS=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].operatingIncome.raw // .quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].incomeFromOperations.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    PRETAX=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].incomeBeforeTax.raw // .quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].pretaxIncome.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
+    TAX_PROV=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].taxProvision.raw // .quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].incomeTaxExpense.raw // 0' "${Y_RAW}_summary" 2>/dev/null)
+    if [[ "$TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$OP_INC_IS" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+        [[ -z "$CASH" || "$CASH" = "null" ]] && CASH=0
+        INV_CAP=$(echo "scale=2; $TA - $CL - $CASH" | bc 2>/dev/null)
+        if [[ "$INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+            TAX_RATE="0"
+            if [[ "$PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$TAX_PROV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                TAX_RATE=$(echo "scale=4; $TAX_PROV / $PRETAX" | bc 2>/dev/null || echo "0")
+            fi
+            NOPAT=$(echo "scale=2; $OP_INC_IS * (1 - $TAX_RATE)" | bc 2>/dev/null)
+            if [[ "$NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                ROIC_RAW=$(echo "scale=4; $NOPAT / $INV_CAP" | bc 2>/dev/null)
+                if [[ "$ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                    ROIC_PCT=$(echo "scale=2; $ROIC_RAW * 100" | bc 2>/dev/null)
+                    ROIC="${ROIC_PCT}%"
+                    log_trace "INFO" "fetch_data" "ROIC computed: $ROIC (NOPAT/Invested Capital)"
+                fi
+            fi
+        fi
+    fi
+fi
+
 # Shares outstanding (proxy for dilution / buybacks)
 SHARES_OUT=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding.raw // .quoteSummary.result[0].defaultKeyStatistics.sharesOutstanding // "N/A"' "${Y_RAW}_summary" 2>/dev/null || echo "N/A")
 SHARES_PRIOR="N/A"
@@ -419,6 +457,55 @@ if [ -n "$CIK" ]; then
                     ;;
                 *) ;;
             esac
+
+            # ROIC from SEC (company-reported XBRL): no rate limit, same source as 10-K/10-Q. Run when Yahoo had no balance sheet line items.
+            if [ "$ROIC" = "N/A" ]; then
+                SEC_TA=$(extract_sec_value "$SEC_FILE" "USD" "Assets")
+                SEC_CL=$(extract_sec_value "$SEC_FILE" "USD" "LiabilitiesCurrent" "CurrentLiabilities")
+                SEC_CASH=$(extract_sec_value "$SEC_FILE" "USD" "CashAndCashEquivalentsAtCarryingValue" "Cash" "CashAndCashEquivalents")
+                SEC_OP=$(extract_sec_value "$SEC_FILE" "USD" "OperatingIncomeLoss" "IncomeFromOperations")
+                SEC_PRETAX=$(extract_sec_value "$SEC_FILE" "USD" "IncomeBeforeTax" "IncomeLossFromContinuingOperationsBeforeIncomeTaxes" "IncomeLossFromContinuingOperationsBeforeTax")
+                SEC_TAX=$(extract_sec_value "$SEC_FILE" "USD" "IncomeTaxExpense" "IncomeTaxExpenseBenefit")
+                # Many filers omit a direct pretax tag; derive from NetIncomeLoss + IncomeTaxExpenseBenefit when available
+                if [[ -z "$SEC_PRETAX" || "$SEC_PRETAX" = "N/A" ]]; then
+                    SEC_NI_VAL=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
+                    if [[ "$SEC_NI_VAL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                        SEC_PRETAX=$(echo "scale=2; $SEC_NI_VAL + $SEC_TAX" | bc 2>/dev/null || echo "N/A")
+                    fi
+                fi
+                [[ -z "$SEC_CASH" || "$SEC_CASH" = "N/A" ]] && SEC_CASH=0
+                [[ -z "$SEC_TAX" || "$SEC_TAX" = "N/A" ]] && SEC_TAX=0
+                # Trim any whitespace from extracted values
+                SEC_TA=$(echo "$SEC_TA" | tr -d '[:space:]')
+                SEC_CL=$(echo "$SEC_CL" | tr -d '[:space:]')
+                SEC_OP=$(echo "$SEC_OP" | tr -d '[:space:]')
+                SEC_PRETAX=$(echo "$SEC_PRETAX" | tr -d '[:space:]')
+                SEC_TAX=$(echo "$SEC_TAX" | tr -d '[:space:]')
+                if [[ "$SEC_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                    SEC_INV_CAP=$(echo "scale=2; $SEC_TA - $SEC_CL - $SEC_CASH" | bc 2>/dev/null)
+                    if [[ "$SEC_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$SEC_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                        SEC_TAX_RATE="0"
+                        if [[ "$SEC_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$SEC_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$SEC_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                            SEC_TAX_RATE=$(echo "scale=4; $SEC_TAX / $SEC_PRETAX" | bc 2>/dev/null || echo "0")
+                            [[ "$SEC_TAX_RATE" =~ ^\. ]] && SEC_TAX_RATE="0$SEC_TAX_RATE"
+                            [[ "$SEC_TAX_RATE" =~ ^-\.[0-9] ]] && SEC_TAX_RATE="-0${SEC_TAX_RATE:1}"
+                        fi
+                        SEC_NOPAT=$(echo "scale=2; $SEC_OP * (1 - $SEC_TAX_RATE)" | bc 2>/dev/null)
+                        if [[ "$SEC_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                            SEC_ROIC_RAW=$(echo "scale=4; $SEC_NOPAT / $SEC_INV_CAP" | bc 2>/dev/null)
+                            [[ "$SEC_ROIC_RAW" =~ ^\. ]] && SEC_ROIC_RAW="0$SEC_ROIC_RAW"
+                            [[ "$SEC_ROIC_RAW" =~ ^-\.[0-9] ]] && SEC_ROIC_RAW="-0${SEC_ROIC_RAW:1}"
+                            if [[ "$SEC_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                                ROIC_PCT=$(echo "scale=2; $SEC_ROIC_RAW * 100" | bc 2>/dev/null)
+                                [[ "$ROIC_PCT" =~ ^\. ]] && ROIC_PCT="0$ROIC_PCT"
+                                [[ "$ROIC_PCT" =~ ^-\.[0-9] ]] && ROIC_PCT="-0${ROIC_PCT:1}"
+                                ROIC="${ROIC_PCT}%"
+                                log_trace "INFO" "fetch_data" "ROIC from SEC companyfacts: $ROIC"
+                            fi
+                        fi
+                    fi
+                fi
+            fi
         fi
     else
         log_trace "INFO" "fetch_data" "SEC fetch failed (curl or empty response)"
@@ -506,7 +593,92 @@ if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" || "$SHARES_PRIOR
         fi
         sleep 2
     fi
-    rm -f "$AV_INCOME" "$AV_CASHFLOW" "$AV_BALANCE"
+    # ROIC fallback from Alpha Vantage when Yahoo balance sheet had no line items (e.g. CRM). Use already-fetched AV_BALANCE/AV_INCOME when present.
+    if [ "$ROIC" = "N/A" ]; then
+        # Space out calls to avoid AV rate limit (5/min); reuse existing files when valid
+        [ ! -f "$AV_BALANCE" ] && sleep 12
+        if [ ! -f "$AV_BALANCE" ] || jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1; then
+            curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
+            sleep 12
+        fi
+        if [ ! -f "$AV_INCOME" ] || jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
+            curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
+            sleep 2
+        fi
+        if [ -f "$AV_BALANCE" ] && [ -f "$AV_INCOME" ] && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1 && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
+            AV_TA=$(jq -r '.annualReports[0].totalAssets // empty' "$AV_BALANCE" 2>/dev/null)
+            AV_CL=$(jq -r '.annualReports[0].totalCurrentLiabilities // empty' "$AV_BALANCE" 2>/dev/null)
+            AV_CASH=$(jq -r '.annualReports[0].cashAndShortTermInvestments // .annualReports[0].cashAndCashEquivalentsAtCarryingValue // .annualReports[0].cash // 0' "$AV_BALANCE" 2>/dev/null)
+            AV_OP=$(jq -r '.annualReports[0].operatingIncome // empty' "$AV_INCOME" 2>/dev/null)
+            AV_PRETAX=$(jq -r '.annualReports[0].incomeBeforeTax // empty' "$AV_INCOME" 2>/dev/null)
+            AV_TAX=$(jq -r '.annualReports[0].incomeTaxExpense // 0' "$AV_INCOME" 2>/dev/null)
+            [[ -z "$AV_CASH" || "$AV_CASH" = "None" ]] && AV_CASH=0
+            [[ -z "$AV_TAX" || "$AV_TAX" = "None" ]] && AV_TAX=0
+            if [[ "$AV_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                AV_INV_CAP=$(echo "scale=2; $AV_TA - $AV_CL - $AV_CASH" | bc 2>/dev/null)
+                if [[ "$AV_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                    AV_TAX_RATE="0"
+                    if [[ "$AV_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$AV_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                        AV_TAX_RATE=$(echo "scale=4; $AV_TAX / $AV_PRETAX" | bc 2>/dev/null || echo "0")
+                    fi
+                    AV_NOPAT=$(echo "scale=2; $AV_OP * (1 - $AV_TAX_RATE)" | bc 2>/dev/null)
+                    if [[ "$AV_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                        AV_ROIC_RAW=$(echo "scale=4; $AV_NOPAT / $AV_INV_CAP" | bc 2>/dev/null)
+                        if [[ "$AV_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                            ROIC_PCT=$(echo "scale=2; $AV_ROIC_RAW * 100" | bc 2>/dev/null)
+                            ROIC="${ROIC_PCT}%"
+                            log_trace "INFO" "fetch_data" "ROIC from Alpha Vantage: $ROIC"
+                        fi
+                    fi
+                fi
+            fi
+        fi
+    fi
+    if [ "${FETCH_KEEP_AV:-0}" != "1" ]; then
+        rm -f "$AV_INCOME" "$AV_CASHFLOW" "$AV_BALANCE"
+    fi
+fi
+
+# ROIC fallback when Yahoo had no balance sheet line items and we did NOT run the main AV block (e.g. no other AV need). Fetch AV balance/income only for ROIC.
+if [ "$ROIC" = "N/A" ] && [ -n "$AV_KEY" ]; then
+    BASE_AV="${BASE_AV:-https://www.alphavantage.co/query}"
+    if [ ! -f "$AV_BALANCE" ] || jq -e '.["Error Message"] // .["Note"]' "$AV_BALANCE" >/dev/null 2>&1; then
+        curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
+        sleep 2
+    fi
+    if [ ! -f "$AV_INCOME" ] || jq -e '.["Error Message"] // .["Note"]' "$AV_INCOME" >/dev/null 2>&1; then
+        curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
+        sleep 2
+    fi
+    if [ -f "$AV_BALANCE" ] && [ -f "$AV_INCOME" ] && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1 && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
+        AV_TA=$(jq -r '.annualReports[0].totalAssets // empty' "$AV_BALANCE" 2>/dev/null)
+        AV_CL=$(jq -r '.annualReports[0].totalCurrentLiabilities // empty' "$AV_BALANCE" 2>/dev/null)
+        AV_CASH=$(jq -r '.annualReports[0].cashAndShortTermInvestments // .annualReports[0].cashAndCashEquivalentsAtCarryingValue // .annualReports[0].cash // 0' "$AV_BALANCE" 2>/dev/null)
+        AV_OP=$(jq -r '.annualReports[0].operatingIncome // empty' "$AV_INCOME" 2>/dev/null)
+        AV_PRETAX=$(jq -r '.annualReports[0].incomeBeforeTax // empty' "$AV_INCOME" 2>/dev/null)
+        AV_TAX=$(jq -r '.annualReports[0].incomeTaxExpense // 0' "$AV_INCOME" 2>/dev/null)
+        [[ -z "$AV_CASH" || "$AV_CASH" = "None" ]] && AV_CASH=0
+        [[ -z "$AV_TAX" || "$AV_TAX" = "None" ]] && AV_TAX=0
+        if [[ "$AV_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+            AV_INV_CAP=$(echo "scale=2; $AV_TA - $AV_CL - $AV_CASH" | bc 2>/dev/null)
+            if [[ "$AV_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+                AV_TAX_RATE="0"
+                if [[ "$AV_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$AV_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                    AV_TAX_RATE=$(echo "scale=4; $AV_TAX / $AV_PRETAX" | bc 2>/dev/null || echo "0")
+                fi
+                AV_NOPAT=$(echo "scale=2; $AV_OP * (1 - $AV_TAX_RATE)" | bc 2>/dev/null)
+                if [[ "$AV_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                    AV_ROIC_RAW=$(echo "scale=4; $AV_NOPAT / $AV_INV_CAP" | bc 2>/dev/null)
+                    if [[ "$AV_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+                        ROIC_PCT=$(echo "scale=2; $AV_ROIC_RAW * 100" | bc 2>/dev/null)
+                        ROIC="${ROIC_PCT}%"
+                        log_trace "INFO" "fetch_data" "ROIC from Alpha Vantage: $ROIC"
+                    fi
+                fi
+            fi
+        fi
+    fi
+    [ "${FETCH_KEEP_AV:-0}" != "1" ] && rm -f "$AV_BALANCE" "$AV_INCOME"
 fi
 
 # When Yahoo (and AV if used) did not provide quarterly gross margin, fill with annual so trend is visible
@@ -881,6 +1053,7 @@ jq -n \
     --arg gross_margin "$GROSS_MARGIN" \
     --arg op_margin "$OP_MARGIN" \
     --arg roa "$ROA" \
+    --arg roic "$ROIC" \
     --arg latest_q_gross_margin "$LATEST_Q_GROSS_MARGIN_PCT" \
     --arg latest_q_gaap_gm "${LATEST_Q_GAAP_GM_PCT:-}" \
     --arg latest_q_non_gaap_gm "${LATEST_Q_NON_GAAP_GM_PCT:-}" \
@@ -913,6 +1086,7 @@ jq -n \
             gross_margin: $gross_margin,
             operating_margin: $op_margin,
             roa: $roa,
+            roic: (if $roic != "" and $roic != "N/A" then $roic else null end),
             revenue_yoy: $rev_yoy,
             net_income_yoy: $ni_yoy,
             revenue_q: $rev_q,
@@ -967,7 +1141,9 @@ jq -n \
         momentum: { earnings_surprises: $surprise }
     }' > "$DATA_FILE"
 
-# Cleanup
-rm -f "$SEC_FILE" "${Y_RAW}_quote" "${Y_RAW}_summary" "$COOKIE_FILE"
+# Cleanup (set FETCH_KEEP_YAHOO=1 to keep Yahoo summary for debugging ROIC/balance sheet)
+if [ "${FETCH_KEEP_YAHOO:-0}" != "1" ]; then
+    rm -f "$SEC_FILE" "${Y_RAW}_quote" "${Y_RAW}_summary" "$COOKIE_FILE"
+fi
 log_trace "INFO" "fetch_data" "Complete | $DATA_FILE"
 echo "✅ Data ready: $DATA_FILE"
