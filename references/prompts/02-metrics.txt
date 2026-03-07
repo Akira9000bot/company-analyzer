@@ -30,4 +30,4 @@ SUMMARY:
 [One short sentence: Strong / Mixed / Weak, or "Decline phase; avoid."]
 
 ---
-Your first line must be "METRICS:". Your last line must be the SUMMARY sentence. No intro. No citations. Use only Green, Yellow, or Red. Output all 5 numbered metric lines then SUMMARY; partial output is invalid. Do not invent or assume data that is not in the JSON payload.
+Your first line must be "METRICS:". Your last line must be the SUMMARY sentence. No intro. No citations. Use only Green, Yellow, or Red. Output all 5 numbered metric lines then SUMMARY; partial output is invalid. Do not invent or assume data that is not in the JSON payload. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (Strong=80+, Mixed=45-79, Weak=0-44; Phase 6=0).

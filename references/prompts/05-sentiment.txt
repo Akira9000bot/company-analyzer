@@ -5,7 +5,7 @@ LOGIC GATES:
 * Sentiment Layers: Classify tone for Analysts as Bullish, Neutral, or Bearish with High, Medium, or Low confidence. Classify Investors similarly. Classify Media as Positive, Mixed, or Negative.
 * Balance: Provide at least 2 Bullish and 2 Bearish specific arguments. Separate fact from interpretation and use 8th-grade English.
 * Price Context: Base analysis on 1-year price performance, including percent change, 52-week range, and moving averages.
-* Catalyst: Identify the next specific upcoming event, earnings date, or major launch.
+* Catalyst: Identify the next specific upcoming event, earnings date, or major launch ONLY if present in the data payload (e.g. guidance, calendar, or explicit date in context). If no such data is provided, do not guess or invent a date—output "No upcoming catalyst in current data."
 * Valuation Anchor: Use the more conservative primary anchor from `analyst_high_target` and `internal_guidance_target` (i.e. the lower of the two when both exist). Treat `analyst_mean_target` as secondary / lagging context, not the main fair-value check during a breakout.
 * Momentum Adjustment:
   - If current price is within 10% above the conservative primary anchor, classify valuation as `Fair`, not `Expensive`.
@@ -25,7 +25,7 @@ Investors: [Bullish or Neutral or Bearish] (Confidence: High or Medium or Low)
 Media: [Positive or Mixed or Negative]
 
 NEXT CATALYST:
-[Event and date, e.g. earnings or launch.]
+[Event and date only if present in the payload; otherwise output exactly: No upcoming catalyst in current data. Do not guess or invent dates.]
 
 BULL CASE:
 1. [First bullish argument.]

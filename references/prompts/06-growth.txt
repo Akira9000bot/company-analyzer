@@ -21,4 +21,4 @@ ANALYSIS:
 3. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
 
 ---
-NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. For ANALYSIS, [Evidence] is a short qualitative fact (e.g. "Expanded into Latin America", "Price increase in Q2")—not a number; use evidence from company description and earnings context. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines.
+NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. For ANALYSIS, [Evidence] is a short qualitative fact (e.g. "Expanded into Latin America", "Price increase in Q2")—not a number; use evidence from company description and earnings context. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (growth driver strength and balance).
