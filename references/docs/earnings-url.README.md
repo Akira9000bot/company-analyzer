@@ -13,7 +13,16 @@ Many companies report **GAAP** and **Non-GAAP gross margin** for the most recent
    If `.cache/data/<TICKER>_earnings_url.txt` exists and contains a URL, that is used.
 
 3. **Auto-discovery**  
-   If neither is set, the script tries to discover a URL from the company's investor relations site: it reads the company **website** from Yahoo's `assetProfile.website`, derives common IR base URLs (e.g. `https://investors.<domain>`, `https://ir.<domain>`), fetches the IR news page, and picks the first link that looks like an earnings or financial-results press release. If a URL is found, it is **saved** to `.cache/data/<TICKER>_earnings_url.txt` for this run and future runs.
+   If neither is set, the script tries to discover a URL from the company's investor relations site. It first checks **`references/earnings_url_overrides.json`**: if the ticker is listed, that **IR base URL** (e.g. `https://investor.fb.com` for META) is tried so discovery can find the earnings link on non-standard IR sites. Then it derives common IR bases from Yahoo's `assetProfile.website` (e.g. `https://investors.<domain>`, `https://ir.<domain>`), fetches each IR news page, and picks the first link that looks like an earnings or press-release page. If a URL is found, it is **saved** to `.cache/data/<TICKER>_earnings_url.txt` for this run and future runs.
+
+**Overrides for non-standard IR:** Add tickers to `references/earnings_url_overrides.json` in either form:
+
+- **Base URL** – Discovery fetches that IR base first (e.g. `https://investor.atmeta.com`) and picks the first earnings link. Use when the company’s IR isn’t at `investors.<domain>`.
+- **Full earnings URL** – Used directly; discovery is skipped. Use for a known press-release URL (update after each earnings report).
+
+```json
+{ "META": "https://investor.atmeta.com/investor-news/press-release-details/2026/Meta-Reports-Fourth-Quarter-and-Full-Year-2025-Results/default.aspx" }
+```
 
 To force a specific URL (e.g. after a new earnings report), set `EARNINGS_URL` or create/update the file:
 

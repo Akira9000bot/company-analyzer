@@ -1,5 +1,12 @@
 #!/bin/bash
 # fetch_data.sh - Dual-Agent Resilient Hybrid
+# Data freshness (e.g. day after earnings):
+#   - Yahoo: quote/price update quickly; quarterly financials often lag 1–2 days.
+#   - SEC companyfacts: updated when 10-Q/10-K is filed (typically 1–4+ weeks after report).
+#   - Alpha Vantage: typically filing-based; same lag as SEC for new quarter.
+#   - Earnings release URL (EARNINGS_URL or discover_earnings_url): has the just-reported quarter;
+#     when set, parser fills latest-q margins, RPO, guidance, and can rebuild gross_margin trend.
+# For post-earnings runs use: ./analyze.sh TICKER --live --refresh (or run this script directly).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -720,10 +727,30 @@ EARNINGS_URL="${EARNINGS_URL:-}"
 EARNINGS_SOURCE=""
 [ -n "$EARNINGS_URL" ] && EARNINGS_SOURCE="env"
 [ -z "$EARNINGS_URL" ] && [ -f "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt" ] && EARNINGS_URL=$(cat "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt" | head -1) && EARNINGS_SOURCE="file"
-# Auto-discover from Yahoo assetProfile.website → IR page → first earnings-like link (if still no URL)
+# references/earnings_url_overrides.json: ticker -> IR base URL (for discovery) or full earnings URL (use directly).
+OVERRIDES_FILE="$(dirname "$SCRIPT_DIR")/references/earnings_url_overrides.json"
+if [ -z "$EARNINGS_URL" ] && [ -f "$OVERRIDES_FILE" ]; then
+    OVERRIDE_VAL=$(jq -r --arg t "$TICKER_UPPER" '.[$t] // empty' "$OVERRIDES_FILE" 2>/dev/null || true)
+    OVERRIDE_VAL=$(echo "${OVERRIDE_VAL:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # If override looks like a full earnings page URL, use it directly and skip discovery.
+    if [ -n "$OVERRIDE_VAL" ] && echo "$OVERRIDE_VAL" | grep -qE '^https?://.+(press-release-details|/news/news-details/|/press-releases?/|financial-results)'; then
+        EARNINGS_URL="$OVERRIDE_VAL"
+        EARNINGS_SOURCE="override"
+        echo "$EARNINGS_URL" > "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
+        echo "📎 Using earnings URL from overrides and saved to ${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
+        log_trace "INFO" "fetch_data" "earnings_url from overrides (full URL)"
+    fi
+fi
+# Auto-discover from Yahoo assetProfile.website → IR page → first earnings-like link (if still no URL).
+# When overrides has only a base URL (e.g. https://investor.atmeta.com), discovery tries that base first.
 if [ -z "$EARNINGS_URL" ] && [ -f "${Y_RAW}_summary" ]; then
     log_trace "INFO" "fetch_data" "earnings_url discovery attempting..."
-    DISCOVERED=$(YAHOO_SUMMARY_JSON="${Y_RAW}_summary" TICKER="$TICKER_UPPER" bash "$SCRIPT_DIR/lib/discover_earnings_url.sh" 2>/dev/null | head -1)
+    EARNINGS_IR_BASE_OVERRIDE=""
+    [ -f "$OVERRIDES_FILE" ] && EARNINGS_IR_BASE_OVERRIDE=$(jq -r --arg t "$TICKER_UPPER" '.[$t] // empty' "$OVERRIDES_FILE" 2>/dev/null || true)
+    EARNINGS_IR_BASE_OVERRIDE=$(echo "${EARNINGS_IR_BASE_OVERRIDE:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    # Only use override as discovery base if it's not already a full earnings URL (we already handled that above).
+    echo "${EARNINGS_IR_BASE_OVERRIDE:-}" | grep -qE '^https?://.+(press-release-details|/news/news-details/|/press-releases?/|financial-results)' && EARNINGS_IR_BASE_OVERRIDE=""
+    DISCOVERED=$(EARNINGS_IR_BASE_OVERRIDE="$EARNINGS_IR_BASE_OVERRIDE" YAHOO_SUMMARY_JSON="${Y_RAW}_summary" TICKER="$TICKER_UPPER" bash "$SCRIPT_DIR/lib/discover_earnings_url.sh" 2>/dev/null | head -1)
     DISCOVERED=$(echo "${DISCOVERED:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     if [ -n "$DISCOVERED" ] && echo "$DISCOVERED" | grep -qE '^https?://'; then
         EARNINGS_URL="$DISCOVERED"

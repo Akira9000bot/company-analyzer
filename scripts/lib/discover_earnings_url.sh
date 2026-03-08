@@ -8,15 +8,19 @@ set -euo pipefail
 
 YAHOO_SUMMARY="${YAHOO_SUMMARY_JSON:-${1:-}}"
 TICKER="${TICKER:-${2:-}}"
-[ -z "$YAHOO_SUMMARY" ] || [ ! -f "$YAHOO_SUMMARY" ] && exit 0
+OVERRIDE_BASE_early="${EARNINGS_IR_BASE_OVERRIDE:-${3:-}}"
 [ -z "$TICKER" ] && exit 0
+# Allow discovery with only an override (no Yahoo summary) so tickers like META can use investor.fb.com.
+[ -z "$YAHOO_SUMMARY" ] && [ ! -f "$YAHOO_SUMMARY" ] && [ -z "$OVERRIDE_BASE_early" ] && exit 0
 
-WEBSITE=$(jq -r '.quoteSummary.result[0].assetProfile.website // empty' "$YAHOO_SUMMARY" 2>/dev/null || true)
-[ -z "$WEBSITE" ] || [ "$WEBSITE" = "null" ] && exit 0
-
-# Normalize: strip protocol and path, strip www.
-DOMAIN=$(echo "$WEBSITE" | sed -E 's|^https?://||; s|^www\.||; s|/.*||; s|^[[:space:]]*||; s|[[:space:]]*$||')
-[ -z "$DOMAIN" ] && exit 0
+WEBSITE=""
+DOMAIN=""
+if [ -n "$YAHOO_SUMMARY" ] && [ -f "$YAHOO_SUMMARY" ]; then
+    WEBSITE=$(jq -r '.quoteSummary.result[0].assetProfile.website // empty' "$YAHOO_SUMMARY" 2>/dev/null || true)
+    [ -n "$WEBSITE" ] && [ "$WEBSITE" != "null" ] && DOMAIN=$(echo "$WEBSITE" | sed -E 's|^https?://||; s|^www\.||; s|/.*||; s|^[[:space:]]*||; s|[[:space:]]*$||')
+fi
+# Need at least override base or domain from Yahoo to try discovery.
+[ -z "$DOMAIN" ] && [ -z "$OVERRIDE_BASE_early" ] && exit 0
 
 resolve_url() {
     local base="$1"
@@ -73,9 +77,13 @@ pick_best_url() {
     done < <(echo "$html" | grep -oE 'href="[^"]+' | sed 's/href="//' || true) | sort -nr | head -1 | sed 's/^[0-9][0-9][0-9][0-9] //'
 }
 
-# Common IR base URLs
-for BASE in "https://investors.${DOMAIN}" "https://ir.${DOMAIN}" "https://${DOMAIN}/investors" "https://${DOMAIN}/ir"; do
-    for PAGE in "${BASE}/news" "$BASE" "${BASE%/}/financials/quarterly-and-annual-results/default.aspx"; do
+# Optional: try ticker-specific IR base first (e.g. META -> investor.fb.com)
+# Pass via env EARNINGS_IR_BASE_OVERRIDE or 3rd argument (one URL).
+OVERRIDE_BASE="${EARNINGS_IR_BASE_OVERRIDE:-${3:-}}"
+OVERRIDE_BASE=$(echo "${OVERRIDE_BASE:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+if [ -n "$OVERRIDE_BASE" ] && echo "$OVERRIDE_BASE" | grep -qE '^https?://'; then
+    # Try override base and common IR paths (investor-news is used by Meta/Q4 IR)
+    for PAGE in "${OVERRIDE_BASE}" "${OVERRIDE_BASE%/}/news" "${OVERRIDE_BASE%/}/investor-news" "${OVERRIDE_BASE%/}/investor-news/default.aspx"; do
         HTML=$(curl -sL -A "Mozilla/5.0 (compatible; OpenClaw-Research/1.0)" --connect-timeout 8 --max-time 15 "$PAGE" 2>/dev/null || true)
         [ -z "$HTML" ] && continue
         URL=$(pick_best_url "$PAGE" "$HTML")
@@ -84,5 +92,20 @@ for BASE in "https://investors.${DOMAIN}" "https://ir.${DOMAIN}" "https://${DOMA
             exit 0
         fi
     done
-done
+fi
+
+# Common IR base URLs derived from Yahoo website domain (skip when DOMAIN is empty, e.g. override-only run)
+if [ -n "$DOMAIN" ]; then
+    for BASE in "https://investors.${DOMAIN}" "https://ir.${DOMAIN}" "https://investor.${DOMAIN}" "https://${DOMAIN}/investors" "https://${DOMAIN}/ir"; do
+        for PAGE in "${BASE}/news" "$BASE" "${BASE%/}/investor-news" "${BASE%/}/investor-news/default.aspx" "${BASE%/}/financials/quarterly-and-annual-results/default.aspx"; do
+            HTML=$(curl -sL -A "Mozilla/5.0 (compatible; OpenClaw-Research/1.0)" --connect-timeout 8 --max-time 15 "$PAGE" 2>/dev/null || true)
+            [ -z "$HTML" ] && continue
+            URL=$(pick_best_url "$PAGE" "$HTML")
+            if [ -n "$URL" ]; then
+                echo "$URL"
+                exit 0
+            fi
+        done
+    done
+fi
 exit 0

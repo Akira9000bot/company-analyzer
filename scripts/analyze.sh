@@ -1,16 +1,25 @@
 #!/bin/bash
 #
 # analyze.sh - Unified Company Analysis (LLM-powered via OpenClaw config)
-# Usage: ./analyze.sh <TICKER> [--live]
+# Usage: ./analyze.sh <TICKER> [--live] [--refresh]
+#   --refresh  Re-fetch data even if .cache/data/<TICKER>_data.json exists (use after earnings for latest quarter).
 #
 
 set -euo pipefail
 
-TICKER="${1:-}"
-LIVE="${2:-}"
+TICKER=""
+LIVE=""
+REFRESH=""
+for arg in "$@"; do
+    case "$arg" in
+        --live)   LIVE="--live" ;;
+        --refresh) REFRESH="1" ;;
+        *)        [ -z "$TICKER" ] && TICKER="$arg" || true ;;
+    esac
+done
 
 if [ -z "$TICKER" ]; then
-    echo "Usage: ./analyze.sh <TICKER> [--live]"
+    echo "Usage: ./analyze.sh <TICKER> [--live] [--refresh]"
     exit 1
 fi
 
@@ -38,9 +47,11 @@ mkdir -p "$OUTPUTS_DIR"
 init_trace
 
 # 1. Fetch Data (same path as pipeline; fail if fetch does not produce file)
+# Use --refresh to re-fetch when running the day after earnings so the latest quarter is included.
 DATA_FILE="$SKILL_DIR/.cache/data/${TICKER_UPPER}_data.json"
-if [ ! -f "$DATA_FILE" ]; then
-    echo "📊 Fetching data..."
+if [ ! -f "$DATA_FILE" ] || [ -n "$REFRESH" ]; then
+    [ -n "$REFRESH" ] && echo "📊 Re-fetching data (--refresh)..."
+    [ ! -f "$DATA_FILE" ] && [ -z "$REFRESH" ] && echo "📊 Fetching data..."
     "$SCRIPT_DIR/fetch_data.sh" "$TICKER_UPPER" || { echo "ERROR: fetch_data.sh failed for $TICKER_UPPER" >&2; exit 1; }
 fi
 [ ! -f "$DATA_FILE" ] && { echo "ERROR: No data file after fetch: $DATA_FILE" >&2; exit 1; }
@@ -240,9 +251,8 @@ $GUARDRAIL_LINE"
 
 $CHEAP_DEFINITION_LINE"
 
-SYNTHESIS_PROMPT="$INJECTION_TOP
-
-$SYNTHESIS_PROMPT"
+# Replace placeholder in prompt with injection block (from framework-weights.json + guardrail data)
+SYNTHESIS_PROMPT="${SYNTHESIS_PROMPT//\{\{INJECTION_BLOCK\}\}/$INJECTION_TOP}"
 FULL_SYNTHESIS_PROMPT="$SYNTHESIS_PROMPT
 
 === 8 FRAMEWORK ANALYSES ===
