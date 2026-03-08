@@ -29,11 +29,11 @@
 - [x] Monitor Gemini 3 Flash TPM levels after heartbeat isolation. (Fixed: Daily resets + isolated heartbeats stabilized TPM; see 2026-03-04 log).
 - [ ] Resume job search automation/research.
 - [ ] Update `company-analyzer` scripts to be path-agnostic.
-- [ ] Commit 7 days of pending memory files (Mar 1-7).
-- [ ] Resolve uncommitted changes in `skills/company-analyzer`.
-- [ ] Investigate and fix `analyze-pipeline.sh` syntax error at line 76. (Partially resolved: identified as a syntax error in the weighted report order loop; manual workaround used for ADBE/DDOG).
-- [ ] Fix the syntax error in `analyze-pipeline.sh` properly.
-- [ ] Resolve Git divergence (17 local vs 56 origin) and hygiene issues.
+- [x] Commit pending memory files. (Fixed: All memory files are tracked and committed).
+- [x] Resolve uncommitted changes in `skills/company-analyzer`. (Fixed: Branch is synced with origin/main).
+- [x] Investigate and fix `analyze-pipeline.sh` syntax error at line 76. (Fixed: Verified syntax and step order; confirmed functional).
+- [x] Fix the syntax error in `analyze-pipeline.sh` properly.
+- [x] Resolve Git divergence and hygiene issues. (Fixed: Repositories are synced and clean as of Mar 8).
 - [ ] Monitor Gemini 3 Flash stability (00:00-03:00 UTC window).
 
 
