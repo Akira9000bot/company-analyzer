@@ -29,16 +29,17 @@
 - [x] Monitor Gemini 3 Flash TPM levels after heartbeat isolation. (Fixed: Daily resets + isolated heartbeats stabilized TPM; see 2026-03-04 log).
 - [ ] Resume job search automation/research.
 - [ ] Update `company-analyzer` scripts to be path-agnostic.
-- [ ] Commit 6 days of pending memory files (Mar 1-6).
+- [ ] Commit 7 days of pending memory files (Mar 1-7).
 - [ ] Resolve uncommitted changes in `skills/company-analyzer`.
 - [ ] Investigate and fix `analyze-pipeline.sh` syntax error at line 76. (Partially resolved: identified as a syntax error in the weighted report order loop; manual workaround used for ADBE/DDOG).
 - [ ] Fix the syntax error in `analyze-pipeline.sh` properly.
-- [ ] Resolve Git divergence (11 local vs 45 origin) and hygiene issues.
+- [ ] Resolve Git divergence (17 local vs 56 origin) and hygiene issues.
 - [ ] Monitor Gemini 3 Flash stability (00:00-03:00 UTC window).
 
 
 ## Investment Research (Feb-Mar 2026)
 - **KVYO (Klaviyo):** Phase 3 (Self-Funding). High Conviction. Moat: Usage-based pricing (AI contraction hedge).
-- **Gemini 503 Instability (2026-03-05):** Gemini 3 Flash exhibits persistent 503 errors during 00:00-03:00 UTC, specifically impacting the `02-metrics` framework.
-- **Analysis Progress:** Completed AMPX, TXN, DDOG, ADBE, MELI, CRM, and FSLY.
+- **NET (Cloudflare) / SNOW (Snowflake):** Completed analysis Mar 7-8. (Results in local assets).
+- **Gemini 503 Instability (2026-03-05):** Gemini 3 Flash exhibits persistent 503 errors during 00:00-03:00 UTC, specifically impacting the `02-metrics` framework. Stability improved Mar 7-8.
+- **Analysis Progress:** Completed AMPX, TXN, DDOG, ADBE, MELI, CRM, FSLY, NET, SNOW, and META.
 - Company analysis findings are stored in local skill assets (see Privacy Protocol).
