@@ -41,5 +41,6 @@
 - **KVYO (Klaviyo):** Phase 3 (Self-Funding). High Conviction. Moat: Usage-based pricing (AI contraction hedge).
 - **NET (Cloudflare) / SNOW (Snowflake):** Completed analysis Mar 7-8. (Results in local assets).
 - **Gemini 503 Instability (2026-03-05):** Gemini 3 Flash exhibits persistent 503 errors during 00:00-03:00 UTC, specifically impacting the `02-metrics` framework. Stability improved Mar 7-8.
-- **Analysis Progress:** Completed AMPX, TXN, DDOG, ADBE, MELI, CRM, FSLY, NET, SNOW, and META.
+- **Model Configuration (2026-03-09):** Pruned `gemini-1.5-flash` from gateway config; exclusively using `gemini-3-flash` and `gemini-3.1-flash-lite`.
+- **Analysis Progress:** Completed AMPX, TXN, DDOG, ADBE, MELI, CRM, FSLY, NET, SNOW, and META. Research in progress for AAPL, MU, and TEAM (Mar 9).
 - Company analysis findings are stored in local skill assets (see Privacy Protocol).

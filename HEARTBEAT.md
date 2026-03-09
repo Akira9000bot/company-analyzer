@@ -27,7 +27,7 @@ If all checks are clear and nothing has changed since the last run, reply EXACTL
 
 Do not provide a "summary of current state" if the state is unchanged. Do not repeat prior warnings if they have not evolved. Complete this checklist in a single, concise response using minimal tokens. 
 
-**Model:** `google/gemini-3-flash-preview`
+**Model:** `google/gemini-3.1-flash-lite-preview`
 
 ---
 
