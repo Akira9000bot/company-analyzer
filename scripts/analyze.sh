@@ -140,6 +140,7 @@ if [ -f "$DATA_FILE" ]; then
     INST_COUNT=$(jq -r '.valuation.institutions_count // empty' "$DATA_FILE" 2>/dev/null)
     PRIMARY_ANCHOR=$(jq -r '.valuation.primary_valuation_anchor // empty' "$DATA_FILE" 2>/dev/null)
     PRIMARY_ANCHOR_SOURCE=$(jq -r '.valuation.primary_valuation_anchor_source // empty' "$DATA_FILE" 2>/dev/null)
+    EARNINGS_URL=$(jq -r '.earnings_url // empty' "$DATA_FILE" 2>/dev/null)
     if [ -n "$CURRENT_PRICE" ] && [ "$CURRENT_PRICE" != "null" ]; then
         PRICE_FMT=$(printf "%.2f" "$CURRENT_PRICE" 2>/dev/null || echo "$CURRENT_PRICE")
         PRICE_LINE="REFERENCE: Current price (from data): \$${PRICE_FMT}."
@@ -250,6 +251,9 @@ $GUARDRAIL_LINE"
 [ -n "$CHEAP_DEFINITION_LINE" ] && INJECTION_TOP="$INJECTION_TOP
 
 $CHEAP_DEFINITION_LINE"
+[ -n "$EARNINGS_URL" ] && [ "$EARNINGS_URL" != "null" ] && INJECTION_TOP="$INJECTION_TOP
+
+Latest SEC filing (10-Q/earnings): $EARNINGS_URL"
 
 # Replace placeholder in prompt with injection block (from framework-weights.json + guardrail data)
 SYNTHESIS_PROMPT="${SYNTHESIS_PROMPT//\{\{INJECTION_BLOCK\}\}/$INJECTION_TOP}"

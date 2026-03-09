@@ -63,10 +63,16 @@ pick_best_url() {
         strong_signal=0
         echo "$url" | grep -qi '/news/news-details/' && score=$((score + 80))
         echo "$url" | grep -qi '/news/news-details/' && strong_signal=1
+        echo "$url" | grep -qi '/news-release-details/' && score=$((score + 80))
+        echo "$url" | grep -qi '/news-release-details/' && strong_signal=1
+        echo "$url" | grep -qi '/news-releases/' && score=$((score + 55))
+        echo "$url" | grep -qi '/news-releases/' && strong_signal=1
         echo "$url" | grep -qi '/press-release' && score=$((score + 60))
         echo "$url" | grep -qi '/press-release' && strong_signal=1
         echo "$url" | grep -qiE '(earnings|financial-results)' && score=$((score + 40))
         echo "$url" | grep -qiE '(earnings|financial-results)' && strong_signal=1
+        echo "$url" | grep -qiE '/quarterly-results/|/annual-results/|/quarterly-results$|/annual-results$' && score=$((score + 50))
+        echo "$url" | grep -qiE '/quarterly-results/|/annual-results/|/quarterly-results$|/annual-results$' && strong_signal=1
         echo "$url" | grep -qiE '(^|[^a-z])q[1-4]([^a-z]|$)|quarter|full-year' && score=$((score + 25))
         echo "$url" | grep -qi '/news/' && score=$((score + 15))
         echo "$url" | grep -qiE '(quarterly-and-annual-results|event-details|events-and-presentations|webcast|transcript)' && score=$((score - 120))
@@ -82,8 +88,8 @@ pick_best_url() {
 OVERRIDE_BASE="${EARNINGS_IR_BASE_OVERRIDE:-${3:-}}"
 OVERRIDE_BASE=$(echo "${OVERRIDE_BASE:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 if [ -n "$OVERRIDE_BASE" ] && echo "$OVERRIDE_BASE" | grep -qE '^https?://'; then
-    # Try override base and common IR paths (investor-news is used by Meta/Q4 IR)
-    for PAGE in "${OVERRIDE_BASE}" "${OVERRIDE_BASE%/}/news" "${OVERRIDE_BASE%/}/investor-news" "${OVERRIDE_BASE%/}/investor-news/default.aspx"; do
+    # Try override base and common IR paths (investor-news is used by Meta/Q4 IR; news-releases by Micron-style IR)
+    for PAGE in "${OVERRIDE_BASE}" "${OVERRIDE_BASE%/}/news" "${OVERRIDE_BASE%/}/news-releases" "${OVERRIDE_BASE%/}/investor-news" "${OVERRIDE_BASE%/}/investor-news/default.aspx"; do
         HTML=$(curl -sL -A "Mozilla/5.0 (compatible; OpenClaw-Research/1.0)" --connect-timeout 8 --max-time 15 "$PAGE" 2>/dev/null || true)
         [ -z "$HTML" ] && continue
         URL=$(pick_best_url "$PAGE" "$HTML")
@@ -97,7 +103,7 @@ fi
 # Common IR base URLs derived from Yahoo website domain (skip when DOMAIN is empty, e.g. override-only run)
 if [ -n "$DOMAIN" ]; then
     for BASE in "https://investors.${DOMAIN}" "https://ir.${DOMAIN}" "https://investor.${DOMAIN}" "https://${DOMAIN}/investors" "https://${DOMAIN}/ir"; do
-        for PAGE in "${BASE}/news" "$BASE" "${BASE%/}/investor-news" "${BASE%/}/investor-news/default.aspx" "${BASE%/}/financials/quarterly-and-annual-results/default.aspx"; do
+        for PAGE in "${BASE}/news" "${BASE%/}/news-releases" "$BASE" "${BASE%/}/investor-news" "${BASE%/}/investor-news/default.aspx" "${BASE%/}/financials/quarterly-and-annual-results/default.aspx"; do
             HTML=$(curl -sL -A "Mozilla/5.0 (compatible; OpenClaw-Research/1.0)" --connect-timeout 8 --max-time 15 "$PAGE" 2>/dev/null || true)
             [ -z "$HTML" ] && continue
             URL=$(pick_best_url "$PAGE" "$HTML")

@@ -45,6 +45,23 @@ If parsing fails or the URL is missing, those fields are `null`. The prompts (01
 
 After each earnings report, update the contents of `<TICKER>_earnings_url.txt` (or `EARNINGS_URL`) to the new press release URL so the pipeline keeps using the latest quarter.
 
+## Alternative: SEC EDGAR filing URL (`fetch_edgar.sh`)
+
+A simpler, SEC-based source for the **latest 10-Q/10-K document URL** and **quarterly/annual numbers** is available:
+
+- **Script:** `scripts/fetch_edgar.sh`
+- **Usage:** `./scripts/fetch_edgar.sh <TICKER>`
+- **Output:** When run from `fetch_data.sh`, SEC data is merged into `.cache/data/<TICKER>_data.json` under the key `edgar` and no standalone `*_edgar.json` file is kept. When run standalone, the script writes `.cache/data/<TICKER>_edgar.json` for debugging.
+
+The script uses the public SEC EDGAR API (company_tickers → companyfacts → submissions) and does not rely on IR discovery or earnings press-release parsing. It outputs:
+
+| Field | Description |
+|-------|-------------|
+| `latest_q_revenue`, `latest_q_net_income`, `latest_fy_revenue` | From XBRL companyfacts with GAAP fallback cascade |
+| `latest_10q_url` | Direct URL to the most recent 10-Q or 10-K document on SEC.gov |
+
+You can use `latest_10q_url` as a replacement for the earnings press-release URL when you need a stable, per-ticker filing link (e.g. for parsing or reference). SEC data is updated when 10-Q/10-K is filed (typically 1–4+ weeks after earnings).
+
 ## Limitations
 
 - Parser assumes a table layout with rows like "GAAP gross margin" and "Non-GAAP gross margin" and the **first** number = most recent quarter. Unusual layouts may not parse correctly.

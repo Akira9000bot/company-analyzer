@@ -1,11 +1,7 @@
 #!/bin/bash
-# fetch_data.sh - Dual-Agent Resilient Hybrid
-# Data freshness (e.g. day after earnings):
-#   - Yahoo: quote/price update quickly; quarterly financials often lag 1–2 days.
-#   - SEC companyfacts: updated when 10-Q/10-K is filed (typically 1–4+ weeks after report).
-#   - Alpha Vantage: typically filing-based; same lag as SEC for new quarter.
-#   - Earnings release URL (EARNINGS_URL or discover_earnings_url): has the just-reported quarter;
-#     when set, parser fills latest-q margins, RPO, guidance, and can rebuild gross_margin trend.
+# fetch_data.sh - SEC EDGAR first, Yahoo for the rest.
+# Financials (revenue, income, FCF, shares, RPO, quarterly trend, filing URL) come from fetch_edgar.sh (SEC).
+# Quote, sector, description, analyst targets, guidance, earnings surprises, institutional ownership come from Yahoo.
 # For post-earnings runs use: ./analyze.sh TICKER --live --refresh (or run this script directly).
 set -euo pipefail
 
@@ -15,15 +11,9 @@ TICKER_UPPER=$(echo "${1:-}" | tr '[:lower:]' '[:upper:]')
 
 DATA_DIR="$(dirname "$SCRIPT_DIR")/.cache/data"
 DATA_FILE="$DATA_DIR/${TICKER_UPPER}_data.json"
+EDGAR_JSON="$DATA_DIR/${TICKER_UPPER}_edgar.json"   # Used only during build; merged into _data.json then removed
 Y_RAW="$DATA_DIR/${TICKER_UPPER}_yahoo_raw.json"
-SEC_FILE="$DATA_DIR/${TICKER_UPPER}_sec_raw.json"
-AV_INCOME="$DATA_DIR/${TICKER_UPPER}_av_income.json"
-AV_CASHFLOW="$DATA_DIR/${TICKER_UPPER}_av_cashflow.json"
-AV_BALANCE="$DATA_DIR/${TICKER_UPPER}_av_balance.json"
 COOKIE_FILE="$DATA_DIR/yahoo_cookie.txt"
-# Alpha Vantage: key from OpenClaw auth profiles (profile alpha-vantage:default)
-OPENCLAW_ROOT="${OPENCLAW_HOME:-${HOME}/.openclaw}"
-AUTH_PROFILES="${OPENCLAW_AUTH_PROFILES:-${OPENCLAW_ROOT}/agents/main/agent/auth-profiles.json}"
 mkdir -p "$DATA_DIR"
 
 # Trace logging (same as pipeline/run-framework; writes to assets/traces/<TICKER>_<date>.trace)
@@ -31,35 +21,45 @@ source "$SCRIPT_DIR/lib/trace.sh"
 init_trace
 log_trace "INFO" "fetch_data" "Starting..."
 
-# Separate User Agents 
-# Yahoo requires a "Browser" agent. SEC requires a "Bot/Email" agent.
+# ============================================
+# Step 0: SEC EDGAR (fetch_edgar.sh) – single source for financials and filing URL
+# ============================================
+echo "📊 Fetching data..."
+echo "🔍 SEC EDGAR (company facts + filing URL)..."
+if "$SCRIPT_DIR/fetch_edgar.sh" "$TICKER_UPPER" >/dev/null 2>&1; then
+    log_trace "INFO" "fetch_data" "SEC EDGAR OK"
+else
+    log_trace "WARN" "fetch_data" "SEC EDGAR failed or missing; Yahoo/fallbacks will be used"
+fi
+
+# Load SEC-derived variables from _edgar.json when present (Yahoo will fill gaps)
+EDGAR_REV_Q="" EDGAR_NI_Q="" EDGAR_REV="" EDGAR_NI="" EDGAR_REV_PRIOR="" EDGAR_NI_PRIOR=""
+EDGAR_REV_Q_YOY="" EDGAR_FCF="" EDGAR_SHARES_OUT="" EDGAR_SHARES_PRIOR="" EDGAR_SHARES_YOY_PCT=""
+EDGAR_REV_LAST_4="[]" EDGAR_GM_LAST_4="[]" EDGAR_LATEST_Q_GM="" EDGAR_RPO_MILLIONS="" EDGAR_DEFERRED_REV="" EARNINGS_URL=""
+if [ -f "$EDGAR_JSON" ] && jq -e '.ticker' "$EDGAR_JSON" >/dev/null 2>&1; then
+    EDGAR_REV_Q=$(jq -r '.latest_q_revenue // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_NI_Q=$(jq -r '.latest_q_net_income // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_REV=$(jq -r '.latest_fy_revenue // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_NI=$(jq -r '.latest_fy_net_income // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_REV_PRIOR=$(jq -r '.latest_fy_revenue_prior // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_NI_PRIOR=$(jq -r '.latest_fy_net_income_prior // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_REV_Q_YOY=$(jq -r '.revenue_q_yoy // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_FCF=$(jq -r '.fcf // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_SHARES_OUT=$(jq -r '.shares_outstanding // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_SHARES_PRIOR=$(jq -r '.shares_prior // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_SHARES_YOY_PCT=$(jq -r '.shares_yoy_pct // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_REV_LAST_4=$(jq -c '.quarterly_trend.revenue // []' "$EDGAR_JSON" 2>/dev/null || echo "[]")
+    EDGAR_GM_LAST_4=$(jq -c '.quarterly_trend.gross_margin // []' "$EDGAR_JSON" 2>/dev/null || echo "[]")
+    EDGAR_LATEST_Q_GM=$(jq -r '.latest_q_gross_margin_pct // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_RPO_MILLIONS=$(jq -r '.rpo_millions // empty' "$EDGAR_JSON" 2>/dev/null)
+    EDGAR_DEFERRED_REV=$(jq -r '.deferred_revenue_millions // empty' "$EDGAR_JSON" 2>/dev/null)
+    EARNINGS_URL=$(jq -r '.latest_10q_url // empty' "$EDGAR_JSON" 2>/dev/null)
+    ( echo "$EDGAR_REV_LAST_4" | jq -e . >/dev/null 2>&1 ) || EDGAR_REV_LAST_4="[]"
+    ( echo "$EDGAR_GM_LAST_4" | jq -e . >/dev/null 2>&1 ) || EDGAR_GM_LAST_4="[]"
+fi
+
+# Yahoo User-Agent (browser-like)
 YAHOO_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-# SEC EDGAR requires a User-Agent with contact info. Set SEC_EDGAR_USER_AGENT or use placeholder.
-SEC_AGENT="${SEC_EDGAR_USER_AGENT:-OpenClaw-Research-Bot/1.0 (mailto:your-email@example.com)}"
-
-# ============================================
-# Helper: SEC Value Extraction
-# ============================================
-extract_sec_value() {
-    local file="$1"; local unit="${2:-USD}"; shift 2
-    for tag in "$@"; do
-        local val=$(jq -r ".facts.\"us-gaap\"[\"$tag\"].units[\"$unit\"] | sort_by(.end) | last | .val // empty" "$file" 2>/dev/null)
-        if [ -n "$val" ] && [ "$val" != "null" ]; then echo "$val"; return 0; fi
-    done
-    echo "N/A"
-}
-
-# Extract two most recent values (for YoY or trend). Echo "PRIOR CURR" (older first) or "N/A N/A".
-extract_sec_two_latest() {
-    local file="$1" unit="${2:-USD}" tag="$3"
-    local arr
-    arr=$(jq -r ".facts.\"us-gaap\"[\"$tag\"].units[\"$unit\"] | sort_by(.end) | if length >= 2 then .[-2:] | map(.val) | join(\" \") else \"N/A N/A\" end" "$file" 2>/dev/null)
-    if [ -n "$arr" ] && [ "$arr" != "null" ] && [ "$arr" != "N/A N/A" ]; then
-        echo "$arr"
-    else
-        echo "N/A N/A"
-    fi
-}
 
 # Convert raw dollar values to millions for human-readable sector_context fields.
 format_millions() {
@@ -345,6 +345,39 @@ SHARES_OUT=$(jq -r '.quoteSummary.result[0].defaultKeyStatistics.sharesOutstandi
 SHARES_PRIOR="N/A"
 SHARES_YOY_PCT="N/A"
 
+# ============================================
+# Overlay: prefer SEC EDGAR values when present (from fetch_edgar.sh)
+# ============================================
+[ -n "$EDGAR_REV_Q" ] && CURR_REV_Q="$EDGAR_REV_Q"
+[ -n "$EDGAR_NI_Q" ] && CURR_NI_Q="$EDGAR_NI_Q"
+# Annual rev/ni: use EDGAR only when Yahoo did not provide (fill gaps, don't overwrite)
+USED_EDGAR_REV=""
+USED_EDGAR_NI=""
+if [ -n "$EDGAR_REV" ] && { [ "$CURR_REV" = "N/A" ] || [ -z "$CURR_REV" ]; }; then CURR_REV="$EDGAR_REV"; REV="$EDGAR_REV"; USED_EDGAR_REV=1; fi
+if [ -n "$EDGAR_NI" ] && { [ "$CURR_NI" = "N/A" ] || [ -z "$CURR_NI" ]; }; then CURR_NI="$EDGAR_NI"; NI="$EDGAR_NI"; USED_EDGAR_NI=1; fi
+if [ -n "$USED_EDGAR_REV" ] && [ -n "$EDGAR_REV_PRIOR" ] && [ -n "$EDGAR_REV" ] && [ "$EDGAR_REV_PRIOR" != "0" ]; then
+    REV_YOY=$(echo "scale=4; ($EDGAR_REV - $EDGAR_REV_PRIOR) * 100 / $EDGAR_REV_PRIOR" | bc 2>/dev/null || echo "$REV_YOY")
+fi
+if [ -n "$USED_EDGAR_NI" ] && [ -n "$EDGAR_NI_PRIOR" ] && [ -n "$EDGAR_NI" ] && [ "$EDGAR_NI_PRIOR" != "0" ]; then
+    NI_YOY=$(echo "scale=4; ($EDGAR_NI - $EDGAR_NI_PRIOR) * 100 / $EDGAR_NI_PRIOR" | bc 2>/dev/null || echo "$NI_YOY")
+fi
+[ -n "$EDGAR_REV_Q_YOY" ] && REV_Q_YOY="$EDGAR_REV_Q_YOY"
+[ -n "$EDGAR_FCF" ] && FCF="$EDGAR_FCF"
+[ -n "$EDGAR_SHARES_OUT" ] && SHARES_OUT="$EDGAR_SHARES_OUT"
+[ -n "$EDGAR_SHARES_PRIOR" ] && SHARES_PRIOR="$EDGAR_SHARES_PRIOR"
+[ -n "$EDGAR_SHARES_YOY_PCT" ] && SHARES_YOY_PCT="$EDGAR_SHARES_YOY_PCT"
+[ -n "$EDGAR_REV_LAST_4" ] && [ "$EDGAR_REV_LAST_4" != "[]" ] && REV_LAST_4="$EDGAR_REV_LAST_4"
+[ -n "$EDGAR_GM_LAST_4" ] && [ "$EDGAR_GM_LAST_4" != "[]" ] && GM_LAST_4="$EDGAR_GM_LAST_4"
+[ -n "$EDGAR_LATEST_Q_GM" ] && [ "$EDGAR_LATEST_Q_GM" != "null" ] && LATEST_Q_GROSS_MARGIN_PCT="$EDGAR_LATEST_Q_GM"
+if [ -n "$EDGAR_RPO_MILLIONS" ] && [[ "$EDGAR_RPO_MILLIONS" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    SEC_RPO=$(echo "scale=0; $EDGAR_RPO_MILLIONS * 1000000" | bc 2>/dev/null || echo "$EDGAR_RPO_MILLIONS")
+fi
+if [ -n "$EDGAR_DEFERRED_REV" ] && [[ "$EDGAR_DEFERRED_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    SEC_DEFERRED_REV=$(echo "scale=0; $EDGAR_DEFERRED_REV * 1000000" | bc 2>/dev/null || echo "$EDGAR_DEFERRED_REV")
+fi
+REV="${REV:-$CURR_REV}"
+NI="${NI:-$CURR_NI}"
+
 # Fallback: gross margin from income statement if financialData missing (gross profit / revenue)
 if [[ "$GROSS_MARGIN" == "N/A" || -z "$GROSS_MARGIN" ]]; then
     REV_IS=$(jq -r '.quoteSummary.result[0].incomeStatementHistory.incomeStatementHistory[0].totalRevenue.raw // empty' "${Y_RAW}_summary" 2>/dev/null)
@@ -365,330 +398,7 @@ fi
 [[ -z "$OP_MARGIN" ]] && OP_MARGIN="N/A"
 [[ -z "$ROA" ]] && ROA="N/A"
 
-# ============================================
-# Step 3: SEC Data (Final Precision)
-# ============================================
-if [ -z "$CIK" ] || [ "$CIK" = "null" ]; then
-    echo "🔍 Looking up SEC CIK..."
-    # 1) Try SEC company_tickers.json (ticker -> CIK) for listed companies
-    SEC_TICKERS=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/files/company_tickers.json" 2>/dev/null)
-    if echo "$SEC_TICKERS" | jq -e '.' >/dev/null 2>&1; then
-        CIK=$(echo "$SEC_TICKERS" | jq -r --arg t "$TICKER_UPPER" '[.[] | select(.ticker == $t) | .cik_str] | first // empty' 2>/dev/null)
-    fi
-    # 2) Fallback: browse-edgar by ticker (atom)
-    if [ -z "$CIK" ]; then
-        CIK=$(curl -s -H "User-Agent: $SEC_AGENT" "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company=${TICKER_UPPER}&output=atom" | grep -o '<cik>[^<]*' | head -1 | sed 's/<cik>//' || echo "")
-    fi
-fi
-
-REV="$CURR_REV"
-NI="$CURR_NI"
-if [ -n "$CIK" ]; then
-    # Fix: Remove leading zeros and use base-10 to prevent octal conversion errors in printf
-    CIK_CLEAN=$(echo "$CIK" | sed 's/^0*//')
-    if [[ "$CIK_CLEAN" =~ ^[0-9]+$ ]] && [ -n "$CIK_CLEAN" ]; then
-    CIK_PADDED=$(printf "%010d" "$CIK_CLEAN")
-    echo "🔍 Fetching SEC financial facts for CIK: $CIK_PADDED"
-    # 🚨 THE FIX: Use SEC_AGENT so EDGAR doesn't block the request with a 403 error
-    if curl -s -H "User-Agent: $SEC_AGENT" "https://data.sec.gov/api/xbrl/companyfacts/CIK${CIK_PADDED}.json" -o "$SEC_FILE"; then
-        if [ -s "$SEC_FILE" ] && jq -e '.facts' "$SEC_FILE" > /dev/null 2>&1; then
-            log_trace "INFO" "fetch_data" "SEC companyfacts OK (CIK $CIK_PADDED)"
-            # Fallback revenue and net income if Yahoo missing
-            if [ "$REV" = "N/A" ] || [ "$NI" = "N/A" ]; then
-                SEC_REV=$(extract_sec_value "$SEC_FILE" "USD" "Revenues" "SalesRevenueNet" "RevenueFromContractWithCustomerExcludingAssessedTax")
-                SEC_NI=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
-                [ "$REV" = "N/A" ] && REV="$SEC_REV"
-                [ "$NI" = "N/A" ] && NI="$SEC_NI"
-            fi
-
-            # Share count trend: two latest SEC values for YoY (dilution vs buyback)
-            # Try multiple SEC concept names and units (companies use different XBRL tags)
-            SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "CommonStockSharesOutstanding")
-            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "pure" "CommonStockSharesOutstanding")
-            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "CommonStockSharesIssued")
-            [ "$SEC_SHARES_TWO" = "N/A N/A" ] && SEC_SHARES_TWO=$(extract_sec_two_latest "$SEC_FILE" "shares" "WeightedAverageNumberOfSharesOutstandingBasic")
-            if [ "$SEC_SHARES_TWO" != "N/A N/A" ]; then
-                SHARES_PRIOR=$(echo "$SEC_SHARES_TWO" | awk '{print $1}')
-                SHARES_CURR_SEC=$(echo "$SEC_SHARES_TWO" | awk '{print $2}')
-                if [[ -n "$SHARES_PRIOR" && -n "$SHARES_CURR_SEC" && "$SHARES_PRIOR" != "0" && "$SHARES_PRIOR" != "N/A" ]]; then
-                    SHARES_YOY_PCT=$(echo "scale=2; ($SHARES_CURR_SEC - $SHARES_PRIOR) * 100 / $SHARES_PRIOR" | bc 2>/dev/null || echo "N/A")
-                    # Prefer SEC current when we have SEC trend so all three (outstanding, prior, yoy_pct) are from same source
-                    SHARES_OUT="$SHARES_CURR_SEC"
-                else
-                    SHARES_PRIOR="N/A"
-                fi
-            fi
-
-            # FCF fallback: operating cash flow minus capex
-            if [ "$FCF" = "N/A" ]; then
-                SEC_OP_CF=$(extract_sec_value "$SEC_FILE" "USD" \
-                    "NetCashProvidedByUsedInOperatingActivities" \
-                    "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations")
-                SEC_CAPEX=$(extract_sec_value "$SEC_FILE" "USD" \
-                    "PaymentsToAcquirePropertyPlantAndEquipment" \
-                    "PaymentsToAcquireProductiveAssets")
-                if [[ "$SEC_OP_CF" != "N/A" && "$SEC_CAPEX" != "N/A" ]]; then
-                    FCF=$(echo "scale=2; $SEC_OP_CF - $SEC_CAPEX" | bc 2>/dev/null || echo "N/A")
-                fi
-            fi
-
-            # Phase 2: Sector-specific "power metric" extraction (SEC tags)
-            case "$SECTOR_TYPE" in
-                TECH)
-                    SEC_RPO=$(extract_sec_value "$SEC_FILE" "USD" "RevenueRemainingPerformanceObligation" "ContractWithCustomerLiability")
-                    SEC_DEFERRED_REV=$(extract_sec_value "$SEC_FILE" "USD" "DeferredRevenue" "ContractWithCustomerLiability" "DeferredRevenueCurrent" "DeferredRevenueNoncurrent")
-                    ;;
-                RETAIL)
-                    INV_RAW=$(extract_sec_value "$SEC_FILE" "USD" "InventoryNet" "Inventory")
-                    COGS_RAW=$(extract_sec_value "$SEC_FILE" "USD" "CostOfGoodsSold" "CostOfRevenue")
-                    if [[ -n "$INV_RAW" && "$INV_RAW" != "N/A" && "$INV_RAW" != "0" && -n "$COGS_RAW" && "$COGS_RAW" != "N/A" ]]; then
-                        INV_TURNOVER=$(echo "scale=2; $COGS_RAW / $INV_RAW" | bc 2>/dev/null || echo "N/A")
-                    fi
-                    [ "$INV_TURNOVER" = "" ] && INV_TURNOVER="N/A"
-                    ;;
-                INDUSTRIAL)
-                    BACKLOG=$(extract_sec_value "$SEC_FILE" "USD" "RevenueRemainingPerformanceObligation" "ContractWithCustomerLiability")
-                    SEC_ASSETS=$(extract_sec_value "$SEC_FILE" "USD" "Assets")
-                    if [[ -n "$SEC_ASSETS" && "$SEC_ASSETS" != "N/A" && "$SEC_ASSETS" != "0" && -n "$CURR_REV" && "$CURR_REV" != "N/A" ]]; then
-                        ASSET_TURNOVER=$(echo "scale=4; $CURR_REV / $SEC_ASSETS" | bc 2>/dev/null || echo "N/A")
-                    fi
-                    [ "$ASSET_TURNOVER" = "" ] && ASSET_TURNOVER="N/A"
-                    ;;
-                FINANCE)
-                    NET_INT_INC=$(extract_sec_value "$SEC_FILE" "USD" "NetInterestIncome" "InterestIncomeExpenseNet")
-                    INT_EARN_ASSETS=$(extract_sec_value "$SEC_FILE" "USD" "InterestEarningAssets" "Assets")
-                    if [[ -n "$INT_EARN_ASSETS" && "$INT_EARN_ASSETS" != "N/A" && "$INT_EARN_ASSETS" != "0" && -n "$NET_INT_INC" && "$NET_INT_INC" != "N/A" ]]; then
-                        NET_INTEREST_MARGIN=$(echo "scale=2; $NET_INT_INC * 100 / $INT_EARN_ASSETS" | bc 2>/dev/null || echo "N/A")
-                    fi
-                    [ "$NET_INTEREST_MARGIN" = "" ] && NET_INTEREST_MARGIN="N/A"
-                    ;;
-                *) ;;
-            esac
-
-            # ROIC from SEC (company-reported XBRL): no rate limit, same source as 10-K/10-Q. Run when Yahoo had no balance sheet line items.
-            if [ "$ROIC" = "N/A" ]; then
-                SEC_TA=$(extract_sec_value "$SEC_FILE" "USD" "Assets")
-                SEC_CL=$(extract_sec_value "$SEC_FILE" "USD" "LiabilitiesCurrent" "CurrentLiabilities")
-                SEC_CASH=$(extract_sec_value "$SEC_FILE" "USD" "CashAndCashEquivalentsAtCarryingValue" "Cash" "CashAndCashEquivalents")
-                SEC_OP=$(extract_sec_value "$SEC_FILE" "USD" "OperatingIncomeLoss" "IncomeFromOperations")
-                SEC_PRETAX=$(extract_sec_value "$SEC_FILE" "USD" "IncomeBeforeTax" "IncomeLossFromContinuingOperationsBeforeIncomeTaxes" "IncomeLossFromContinuingOperationsBeforeTax")
-                SEC_TAX=$(extract_sec_value "$SEC_FILE" "USD" "IncomeTaxExpense" "IncomeTaxExpenseBenefit")
-                # Many filers omit a direct pretax tag; derive from NetIncomeLoss + IncomeTaxExpenseBenefit when available
-                if [[ -z "$SEC_PRETAX" || "$SEC_PRETAX" = "N/A" ]]; then
-                    SEC_NI_VAL=$(extract_sec_value "$SEC_FILE" "USD" "NetIncomeLoss" "ProfitLoss")
-                    if [[ "$SEC_NI_VAL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                        SEC_PRETAX=$(echo "scale=2; $SEC_NI_VAL + $SEC_TAX" | bc 2>/dev/null || echo "N/A")
-                    fi
-                fi
-                [[ -z "$SEC_CASH" || "$SEC_CASH" = "N/A" ]] && SEC_CASH=0
-                [[ -z "$SEC_TAX" || "$SEC_TAX" = "N/A" ]] && SEC_TAX=0
-                # Trim any whitespace from extracted values
-                SEC_TA=$(echo "$SEC_TA" | tr -d '[:space:]')
-                SEC_CL=$(echo "$SEC_CL" | tr -d '[:space:]')
-                SEC_OP=$(echo "$SEC_OP" | tr -d '[:space:]')
-                SEC_PRETAX=$(echo "$SEC_PRETAX" | tr -d '[:space:]')
-                SEC_TAX=$(echo "$SEC_TAX" | tr -d '[:space:]')
-                if [[ "$SEC_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$SEC_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                    SEC_INV_CAP=$(echo "scale=2; $SEC_TA - $SEC_CL - $SEC_CASH" | bc 2>/dev/null)
-                    if [[ "$SEC_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$SEC_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
-                        SEC_TAX_RATE="0"
-                        if [[ "$SEC_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$SEC_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$SEC_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                            SEC_TAX_RATE=$(echo "scale=4; $SEC_TAX / $SEC_PRETAX" | bc 2>/dev/null || echo "0")
-                            [[ "$SEC_TAX_RATE" =~ ^\. ]] && SEC_TAX_RATE="0$SEC_TAX_RATE"
-                            [[ "$SEC_TAX_RATE" =~ ^-\.[0-9] ]] && SEC_TAX_RATE="-0${SEC_TAX_RATE:1}"
-                        fi
-                        SEC_NOPAT=$(echo "scale=2; $SEC_OP * (1 - $SEC_TAX_RATE)" | bc 2>/dev/null)
-                        if [[ "$SEC_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                            SEC_ROIC_RAW=$(echo "scale=4; $SEC_NOPAT / $SEC_INV_CAP" | bc 2>/dev/null)
-                            [[ "$SEC_ROIC_RAW" =~ ^\. ]] && SEC_ROIC_RAW="0$SEC_ROIC_RAW"
-                            [[ "$SEC_ROIC_RAW" =~ ^-\.[0-9] ]] && SEC_ROIC_RAW="-0${SEC_ROIC_RAW:1}"
-                            if [[ "$SEC_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                                ROIC_PCT=$(echo "scale=2; $SEC_ROIC_RAW * 100" | bc 2>/dev/null)
-                                [[ "$ROIC_PCT" =~ ^\. ]] && ROIC_PCT="0$ROIC_PCT"
-                                [[ "$ROIC_PCT" =~ ^-\.[0-9] ]] && ROIC_PCT="-0${ROIC_PCT:1}"
-                                ROIC="${ROIC_PCT}%"
-                                log_trace "INFO" "fetch_data" "ROIC from SEC companyfacts: $ROIC"
-                            fi
-                        fi
-                    fi
-                fi
-            fi
-        fi
-    else
-        log_trace "INFO" "fetch_data" "SEC fetch failed (curl or empty response)"
-    fi
-    fi
-else
-    log_trace "INFO" "fetch_data" "SEC skipped (no CIK)"
-fi
-
-# ============================================
-# Step 3.5: Alpha Vantage fallback (FCF, revenue_q_yoy)
-# Key from OpenClaw auth profiles (profile alpha-vantage:default).
-# Uses up to 2 API calls when key is set and Yahoo/SEC left any of these N/A.
-# ============================================
-AV_KEY=""
-if [ -f "$AUTH_PROFILES" ]; then
-    AV_KEY=$(jq -r '.profiles["alpha-vantage:default"].key // empty' "$AUTH_PROFILES" 2>/dev/null || true)
-fi
-NEED_AV_INCOME="0"
-echo "$GM_LAST_4" | jq -e 'any(. == null)' >/dev/null 2>&1 && NEED_AV_INCOME="1"
-[[ "$REV_Q_YOY" = "N/A" ]] && NEED_AV_INCOME="1"
-if [[ -n "$AV_KEY" && ( "$FCF" = "N/A" || "$REV_Q_YOY" = "N/A" || "$SHARES_PRIOR" = "N/A" || "$NEED_AV_INCOME" = "1" ) ]]; then
-    log_trace "INFO" "fetch_data" "Alpha Vantage fallback (FCF/revenue_q_yoy/shares/gross_margin)"
-    echo "🔍 Alpha Vantage fallback for FCF / revenue_q_yoy / share count trend / quarterly gross margin..."
-    BASE_AV="https://www.alphavantage.co/query"
-    if [ "$REV_Q_YOY" = "N/A" ] || [ "$NEED_AV_INCOME" = "1" ]; then
-        curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
-        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_INCOME" >/dev/null 2>&1; then
-            # quarterlyReports: [0]=latest, [4]=same quarter prior year (if 5 quarters available)
-            REV_Q_CURR=$(jq -r '.quarterlyReports[0].totalRevenue // empty' "$AV_INCOME" 2>/dev/null)
-            # Same quarter prior year requires at least 5 quarterly rows; do NOT fall back to [1] (prior quarter),
-            # because that would turn a YoY metric into a sequential comparison and silently misstate growth.
-            REV_Q_PREV=$(jq -r '.quarterlyReports[4].totalRevenue // empty' "$AV_INCOME" 2>/dev/null)
-            if [[ -n "$REV_Q_CURR" && -n "$REV_Q_PREV" && "$REV_Q_PREV" != "0" ]]; then
-                REV_Q_YOY=$(echo "scale=4; ($REV_Q_CURR - $REV_Q_PREV) * 100 / $REV_Q_PREV" | bc 2>/dev/null || echo "N/A")
-            fi
-            # Quarterly gross margin from AV when Yahoo had nulls: grossProfit/totalRevenue*100 or (revenue-cost)/revenue
-            if [ "$NEED_AV_INCOME" = "1" ]; then
-                GM_AV=$(jq -c '
-                    [.quarterlyReports[0:4][] |
-                        (.totalRevenue | if type == "string" then (tonumber? // empty) else . end) as $rev |
-                        (.grossProfit | if type == "string" then (tonumber? // empty) else . end) as $gp |
-                        ((.costOfRevenue // .costOfGoodsAndServicesSold) | if type == "string" then (tonumber? // empty) else . end) as $cost |
-                        (if $rev != null and $rev != 0 then
-                            (if $gp != null and $gp > 0 then ($gp / $rev) * 100
-                             elif $cost != null and (($rev - $cost) > 0) then (($rev - $cost) / $rev) * 100
-                             else null end)
-                         else null end)]
-                ' "$AV_INCOME" 2>/dev/null || echo "[]")
-                if [ -n "$GM_AV" ] && [ "$GM_AV" != "[]" ] && echo "$GM_AV" | jq -e 'length > 0 and (.[0] != null)' >/dev/null 2>&1; then
-                    GM_LAST_4="$GM_AV"
-                    LATEST_Q_GROSS_MARGIN_PCT=$(echo "$GM_AV" | jq -r '.[0] | if . != null then (. * 100 | floor / 100 | tostring) else "N/A" end' 2>/dev/null || echo "N/A")
-                fi
-            fi
-        fi
-        sleep 2
-    fi
-    if [ "$FCF" = "N/A" ]; then
-        curl -s "${BASE_AV}?function=CASH_FLOW&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_CASHFLOW"
-        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_CASHFLOW" >/dev/null 2>&1; then
-            # Alpha Vantage: operatingCashflow, capitalExpenditures (capex often negative)
-            OP_CF_AV=$(jq -r '.annualReports[0].operatingCashflow // empty' "$AV_CASHFLOW" 2>/dev/null)
-            CAPEX_AV=$(jq -r '.annualReports[0].capitalExpenditures // empty' "$AV_CASHFLOW" 2>/dev/null)
-            if [[ -n "$OP_CF_AV" && "$OP_CF_AV" != "None" ]]; then
-                if [[ -n "$CAPEX_AV" && "$CAPEX_AV" != "None" && "$CAPEX_AV" != "0" ]]; then
-                    # Capex is typically negative; FCF = operating + capex (e.g. 100 + (-20) = 80)
-                    FCF=$(echo "scale=0; $OP_CF_AV + $CAPEX_AV" | bc 2>/dev/null || echo "$OP_CF_AV")
-                else
-                    FCF="$OP_CF_AV"
-                fi
-            fi
-        fi
-    fi
-    # Share count trend: quarterly balance sheet has commonStockSharesOutstanding
-    if [ "$SHARES_PRIOR" = "N/A" ]; then
-        curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
-        if ! jq -e '.["Error Message"] // .["Note"]' "$AV_BALANCE" >/dev/null 2>&1; then
-            AV_SHARES_CURR=$(jq -r '.quarterlyReports[0].commonStockSharesOutstanding // empty' "$AV_BALANCE" 2>/dev/null)
-            AV_SHARES_PRIOR=$(jq -r '.quarterlyReports[4].commonStockSharesOutstanding // .quarterlyReports[1].commonStockSharesOutstanding // empty' "$AV_BALANCE" 2>/dev/null)
-            if [[ -n "$AV_SHARES_CURR" && -n "$AV_SHARES_PRIOR" && "$AV_SHARES_PRIOR" != "0" && "$AV_SHARES_PRIOR" != "None" ]]; then
-                SHARES_PRIOR="$AV_SHARES_PRIOR"
-                SHARES_YOY_PCT=$(echo "scale=2; ($AV_SHARES_CURR - $AV_SHARES_PRIOR) * 100 / $AV_SHARES_PRIOR" | bc 2>/dev/null || echo "N/A")
-                [ "$SHARES_OUT" = "N/A" ] && SHARES_OUT="$AV_SHARES_CURR"
-            fi
-        fi
-        sleep 2
-    fi
-    # ROIC fallback from Alpha Vantage when Yahoo balance sheet had no line items (e.g. CRM). Use already-fetched AV_BALANCE/AV_INCOME when present.
-    if [ "$ROIC" = "N/A" ]; then
-        # Space out calls to avoid AV rate limit (5/min); reuse existing files when valid
-        [ ! -f "$AV_BALANCE" ] && sleep 12
-        if [ ! -f "$AV_BALANCE" ] || jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1; then
-            curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
-            sleep 12
-        fi
-        if [ ! -f "$AV_INCOME" ] || jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
-            curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
-            sleep 2
-        fi
-        if [ -f "$AV_BALANCE" ] && [ -f "$AV_INCOME" ] && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1 && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
-            AV_TA=$(jq -r '.annualReports[0].totalAssets // empty' "$AV_BALANCE" 2>/dev/null)
-            AV_CL=$(jq -r '.annualReports[0].totalCurrentLiabilities // empty' "$AV_BALANCE" 2>/dev/null)
-            AV_CASH=$(jq -r '.annualReports[0].cashAndShortTermInvestments // .annualReports[0].cashAndCashEquivalentsAtCarryingValue // .annualReports[0].cash // 0' "$AV_BALANCE" 2>/dev/null)
-            AV_OP=$(jq -r '.annualReports[0].operatingIncome // empty' "$AV_INCOME" 2>/dev/null)
-            AV_PRETAX=$(jq -r '.annualReports[0].incomeBeforeTax // empty' "$AV_INCOME" 2>/dev/null)
-            AV_TAX=$(jq -r '.annualReports[0].incomeTaxExpense // 0' "$AV_INCOME" 2>/dev/null)
-            [[ -z "$AV_CASH" || "$AV_CASH" = "None" ]] && AV_CASH=0
-            [[ -z "$AV_TAX" || "$AV_TAX" = "None" ]] && AV_TAX=0
-            if [[ "$AV_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                AV_INV_CAP=$(echo "scale=2; $AV_TA - $AV_CL - $AV_CASH" | bc 2>/dev/null)
-                if [[ "$AV_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
-                    AV_TAX_RATE="0"
-                    if [[ "$AV_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$AV_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                        AV_TAX_RATE=$(echo "scale=4; $AV_TAX / $AV_PRETAX" | bc 2>/dev/null || echo "0")
-                    fi
-                    AV_NOPAT=$(echo "scale=2; $AV_OP * (1 - $AV_TAX_RATE)" | bc 2>/dev/null)
-                    if [[ "$AV_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                        AV_ROIC_RAW=$(echo "scale=4; $AV_NOPAT / $AV_INV_CAP" | bc 2>/dev/null)
-                        if [[ "$AV_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                            ROIC_PCT=$(echo "scale=2; $AV_ROIC_RAW * 100" | bc 2>/dev/null)
-                            ROIC="${ROIC_PCT}%"
-                            log_trace "INFO" "fetch_data" "ROIC from Alpha Vantage: $ROIC"
-                        fi
-                    fi
-                fi
-            fi
-        fi
-    fi
-    if [ "${FETCH_KEEP_AV:-0}" != "1" ]; then
-        rm -f "$AV_INCOME" "$AV_CASHFLOW" "$AV_BALANCE"
-    fi
-fi
-
-# ROIC fallback when Yahoo had no balance sheet line items and we did NOT run the main AV block (e.g. no other AV need). Fetch AV balance/income only for ROIC.
-if [ "$ROIC" = "N/A" ] && [ -n "$AV_KEY" ]; then
-    BASE_AV="${BASE_AV:-https://www.alphavantage.co/query}"
-    if [ ! -f "$AV_BALANCE" ] || jq -e '.["Error Message"] // .["Note"]' "$AV_BALANCE" >/dev/null 2>&1; then
-        curl -s "${BASE_AV}?function=BALANCE_SHEET&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_BALANCE"
-        sleep 2
-    fi
-    if [ ! -f "$AV_INCOME" ] || jq -e '.["Error Message"] // .["Note"]' "$AV_INCOME" >/dev/null 2>&1; then
-        curl -s "${BASE_AV}?function=INCOME_STATEMENT&symbol=${TICKER_UPPER}&apikey=${AV_KEY}" -o "$AV_INCOME"
-        sleep 2
-    fi
-    if [ -f "$AV_BALANCE" ] && [ -f "$AV_INCOME" ] && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_BALANCE" >/dev/null 2>&1 && ! jq -e '.["Error Message"] // .["Note"] // .["Information"]' "$AV_INCOME" >/dev/null 2>&1; then
-        AV_TA=$(jq -r '.annualReports[0].totalAssets // empty' "$AV_BALANCE" 2>/dev/null)
-        AV_CL=$(jq -r '.annualReports[0].totalCurrentLiabilities // empty' "$AV_BALANCE" 2>/dev/null)
-        AV_CASH=$(jq -r '.annualReports[0].cashAndShortTermInvestments // .annualReports[0].cashAndCashEquivalentsAtCarryingValue // .annualReports[0].cash // 0' "$AV_BALANCE" 2>/dev/null)
-        AV_OP=$(jq -r '.annualReports[0].operatingIncome // empty' "$AV_INCOME" 2>/dev/null)
-        AV_PRETAX=$(jq -r '.annualReports[0].incomeBeforeTax // empty' "$AV_INCOME" 2>/dev/null)
-        AV_TAX=$(jq -r '.annualReports[0].incomeTaxExpense // 0' "$AV_INCOME" 2>/dev/null)
-        [[ -z "$AV_CASH" || "$AV_CASH" = "None" ]] && AV_CASH=0
-        [[ -z "$AV_TAX" || "$AV_TAX" = "None" ]] && AV_TAX=0
-        if [[ "$AV_TA" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_CL" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [[ "$AV_OP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-            AV_INV_CAP=$(echo "scale=2; $AV_TA - $AV_CL - $AV_CASH" | bc 2>/dev/null)
-            if [[ "$AV_INV_CAP" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_INV_CAP > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
-                AV_TAX_RATE="0"
-                if [[ "$AV_PRETAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$AV_PRETAX != 0" | bc 2>/dev/null || echo 0)" = "1" ] && [[ "$AV_TAX" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                    AV_TAX_RATE=$(echo "scale=4; $AV_TAX / $AV_PRETAX" | bc 2>/dev/null || echo "0")
-                fi
-                AV_NOPAT=$(echo "scale=2; $AV_OP * (1 - $AV_TAX_RATE)" | bc 2>/dev/null)
-                if [[ "$AV_NOPAT" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                    AV_ROIC_RAW=$(echo "scale=4; $AV_NOPAT / $AV_INV_CAP" | bc 2>/dev/null)
-                    if [[ "$AV_ROIC_RAW" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-                        ROIC_PCT=$(echo "scale=2; $AV_ROIC_RAW * 100" | bc 2>/dev/null)
-                        ROIC="${ROIC_PCT}%"
-                        log_trace "INFO" "fetch_data" "ROIC from Alpha Vantage: $ROIC"
-                    fi
-                fi
-            fi
-        fi
-    fi
-    [ "${FETCH_KEEP_AV:-0}" != "1" ] && rm -f "$AV_BALANCE" "$AV_INCOME"
-fi
-
-# When Yahoo (and AV if used) did not provide quarterly gross margin, fill with annual so trend is visible
+# When Yahoo did not provide quarterly gross margin, fill with annual so trend is visible
 QUARTERLY_GM_IMPUTED="false"
 ANNUAL_GM_PCT=""
 if [[ "$GROSS_MARGIN" =~ ^([0-9.]+)%?$ ]]; then
@@ -709,11 +419,20 @@ if [ -n "$ANNUAL_GM_PCT" ] && [ "$(echo "scale=2; $ANNUAL_GM_PCT > 0" | bc 2>/de
     fi
 fi
 
-# ============================================
-# Step 3.9: Optional earnings release (latest quarter GAAP / non-GAAP gross margin, RPO, compute/AI segment)
-# Sources for EARNINGS_URL (in order): env EARNINGS_URL, .cache/data/<TICKER>_earnings_url.txt, auto-discovery from Yahoo company website.
-# RPO and compute_and_ai_* are optional: null for non-SaaS or when not in the release (no error; skip in analysis).
-# ============================================
+# Earnings URL is set from SEC EDGAR (fetch_edgar.sh) in Step 0; no discovery or parser.
+
+# Margin inflection: compare latest-q margin to annual when available
+if [ "$MARGIN_INFLECTION" = "false" ] && [ -n "$LATEST_Q_GROSS_MARGIN_PCT" ] && [ "$LATEST_Q_GROSS_MARGIN_PCT" != "N/A" ]; then
+    ANNUAL_PCT=""
+    if [[ "$GROSS_MARGIN" =~ ^([0-9.]+)%?$ ]]; then ANNUAL_PCT="${BASH_REMATCH[1]}"; fi
+    if [[ -n "$ANNUAL_PCT" && "$ANNUAL_PCT" =~ ^[0-9.]+$ ]] && [[ "$LATEST_Q_GROSS_MARGIN_PCT" =~ ^[0-9.]+$ ]]; then
+        PP_DIFF=$(echo "scale=2; $LATEST_Q_GROSS_MARGIN_PCT - $ANNUAL_PCT" | bc 2>/dev/null || echo "0")
+        GT_150=$(echo "scale=0; $PP_DIFF > 1.5" | bc 2>/dev/null || echo "0")
+        [ "${GT_150:-0}" = "1" ] && MARGIN_INFLECTION="true"
+    fi
+fi
+
+# Placeholders for optional fields (no longer parsed from earnings HTML)
 LATEST_Q_GAAP_GM_PCT=""
 LATEST_Q_NON_GAAP_GM_PCT=""
 RPO_MILLIONS=""
@@ -722,95 +441,6 @@ FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS=""
 COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT=""
 FULL_YEAR_GUIDANCE_EPS_LOW=""
 FULL_YEAR_GUIDANCE_EPS_HIGH=""
-RESOLVED_EARNINGS_URL=""
-EARNINGS_URL="${EARNINGS_URL:-}"
-EARNINGS_SOURCE=""
-[ -n "$EARNINGS_URL" ] && EARNINGS_SOURCE="env"
-[ -z "$EARNINGS_URL" ] && [ -f "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt" ] && EARNINGS_URL=$(cat "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt" | head -1) && EARNINGS_SOURCE="file"
-# references/earnings_url_overrides.json: ticker -> IR base URL (for discovery) or full earnings URL (use directly).
-OVERRIDES_FILE="$(dirname "$SCRIPT_DIR")/references/earnings_url_overrides.json"
-if [ -z "$EARNINGS_URL" ] && [ -f "$OVERRIDES_FILE" ]; then
-    OVERRIDE_VAL=$(jq -r --arg t "$TICKER_UPPER" '.[$t] // empty' "$OVERRIDES_FILE" 2>/dev/null || true)
-    OVERRIDE_VAL=$(echo "${OVERRIDE_VAL:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    # If override looks like a full earnings page URL, use it directly and skip discovery.
-    if [ -n "$OVERRIDE_VAL" ] && echo "$OVERRIDE_VAL" | grep -qE '^https?://.+(press-release-details|/news/news-details/|/press-releases?/|financial-results)'; then
-        EARNINGS_URL="$OVERRIDE_VAL"
-        EARNINGS_SOURCE="override"
-        echo "$EARNINGS_URL" > "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
-        echo "📎 Using earnings URL from overrides and saved to ${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
-        log_trace "INFO" "fetch_data" "earnings_url from overrides (full URL)"
-    fi
-fi
-# Auto-discover from Yahoo assetProfile.website → IR page → first earnings-like link (if still no URL).
-# When overrides has only a base URL (e.g. https://investor.atmeta.com), discovery tries that base first.
-if [ -z "$EARNINGS_URL" ] && [ -f "${Y_RAW}_summary" ]; then
-    log_trace "INFO" "fetch_data" "earnings_url discovery attempting..."
-    EARNINGS_IR_BASE_OVERRIDE=""
-    [ -f "$OVERRIDES_FILE" ] && EARNINGS_IR_BASE_OVERRIDE=$(jq -r --arg t "$TICKER_UPPER" '.[$t] // empty' "$OVERRIDES_FILE" 2>/dev/null || true)
-    EARNINGS_IR_BASE_OVERRIDE=$(echo "${EARNINGS_IR_BASE_OVERRIDE:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    # Only use override as discovery base if it's not already a full earnings URL (we already handled that above).
-    echo "${EARNINGS_IR_BASE_OVERRIDE:-}" | grep -qE '^https?://.+(press-release-details|/news/news-details/|/press-releases?/|financial-results)' && EARNINGS_IR_BASE_OVERRIDE=""
-    DISCOVERED=$(EARNINGS_IR_BASE_OVERRIDE="$EARNINGS_IR_BASE_OVERRIDE" YAHOO_SUMMARY_JSON="${Y_RAW}_summary" TICKER="$TICKER_UPPER" bash "$SCRIPT_DIR/lib/discover_earnings_url.sh" 2>/dev/null | head -1)
-    DISCOVERED=$(echo "${DISCOVERED:-}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    if [ -n "$DISCOVERED" ] && echo "$DISCOVERED" | grep -qE '^https?://'; then
-        EARNINGS_URL="$DISCOVERED"
-        EARNINGS_SOURCE="discovered"
-        echo "$EARNINGS_URL" > "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
-        echo "📎 Discovered earnings URL and saved to ${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
-        log_trace "INFO" "fetch_data" "earnings_url discovery found, saved to file"
-    else
-        log_trace "INFO" "fetch_data" "earnings_url discovery none"
-    fi
-fi
-[ -n "$EARNINGS_URL" ] && [ -z "$EARNINGS_SOURCE" ] && EARNINGS_SOURCE="file"
-if [ -n "$EARNINGS_URL" ]; then
-    log_trace "INFO" "fetch_data" "earnings_url source=$EARNINGS_SOURCE, parsing..."
-    echo "🔍 Parsing earnings release (gross margin, RPO, non-GAAP net income, compute/AI growth)..."
-    PARSED=$(EARNINGS_URL="$EARNINGS_URL" bash "$SCRIPT_DIR/lib/parse_earnings_gross_margin.sh" 2>/dev/null) || true
-    if [ -n "$PARSED" ]; then
-        eval "$(echo "$PARSED" | grep -E '^(LATEST_Q_(GAAP|NON_GAAP)_GM_PCT|RPO_MILLIONS|RPO_YOY_PCT|FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS|COMPUTE_AND_AI_REVENUE_GROWTH_YOY_PCT|FULL_YEAR_GUIDANCE_EPS_(LOW|HIGH)|RESOLVED_EARNINGS_URL)=')"
-        if [ -n "${RESOLVED_EARNINGS_URL:-}" ] && [ "$RESOLVED_EARNINGS_URL" != "$EARNINGS_URL" ]; then
-            EARNINGS_URL="$RESOLVED_EARNINGS_URL"
-            echo "$EARNINGS_URL" > "${DATA_DIR}/${TICKER_UPPER}_earnings_url.txt"
-            log_trace "INFO" "fetch_data" "earnings_url normalized to resolved release URL"
-        fi
-        # Prefer explicit earnings-release margin over a stale or annual fallback for the latest quarter.
-        for v in "$LATEST_Q_GAAP_GM_PCT" "$LATEST_Q_NON_GAAP_GM_PCT"; do
-            if [[ -n "$v" && "$v" != "N/A" && "$v" =~ ^[0-9.]+$ ]]; then
-                LATEST_Q_GROSS_MARGIN_PCT="$v"
-                break
-            fi
-        done
-        # If quarterly trend is flat/imputed because upstream quarterly data is missing, rebuild it from recent releases.
-        if [ "$QUARTERLY_GM_IMPUTED" = "true" ] || echo "$GM_LAST_4" | jq -e 'length > 0 and ((unique | length) == 1)' >/dev/null 2>&1; then
-            GM_EARNINGS=$(EARNINGS_URL="$EARNINGS_URL" bash "$SCRIPT_DIR/lib/build_earnings_gm_trend.sh" 2>/dev/null || echo "[]")
-            if echo "$GM_EARNINGS" | jq -e 'length >= 2 and ((unique | length) > 1)' >/dev/null 2>&1; then
-                GM_LAST_4="$GM_EARNINGS"
-                QUARTERLY_GM_IMPUTED="false"
-                log_trace "INFO" "fetch_data" "gross_margin trend rebuilt from earnings releases"
-            fi
-        fi
-        log_trace "INFO" "fetch_data" "earnings_parser OK"
-    else
-        log_trace "WARN" "fetch_data" "earnings_parser no output (parse failed or empty)"
-    fi
-    # Margin inflection fallback: if still false, compare latest-q margin (earnings or Yahoo) to annual
-    if [ "$MARGIN_INFLECTION" = "false" ]; then
-        LATEST_PCT=""
-        for v in "$LATEST_Q_NON_GAAP_GM_PCT" "$LATEST_Q_GAAP_GM_PCT" "$LATEST_Q_GROSS_MARGIN_PCT"; do
-            if [[ -n "$v" && "$v" != "N/A" && "$v" =~ ^[0-9.]+$ ]]; then LATEST_PCT="$v"; break; fi
-        done
-        ANNUAL_PCT=""
-        if [[ "$GROSS_MARGIN" =~ ^([0-9.]+)%?$ ]]; then ANNUAL_PCT="${BASH_REMATCH[1]}"; fi
-        if [[ -n "$LATEST_PCT" && -n "$ANNUAL_PCT" ]] && [[ "$LATEST_PCT" =~ ^[0-9.]+$ && "$ANNUAL_PCT" =~ ^[0-9.]+$ ]]; then
-            PP_DIFF=$(echo "scale=2; $LATEST_PCT - $ANNUAL_PCT" | bc 2>/dev/null || echo "0")
-            GT_150=$(echo "scale=0; $PP_DIFF > 1.5" | bc 2>/dev/null || echo "0")
-            [ "${GT_150:-0}" = "1" ] && MARGIN_INFLECTION="true"
-        fi
-    fi
-else
-    log_trace "INFO" "fetch_data" "earnings_parser skipped (no URL)"
-fi
 
 # Sentiment inflection fallback: strong recent earnings beats (2+ quarters positive surprise) when 7d estimate revision not available
 if [ "$SENTIMENT_INFLECTION" = "false" ] && [ -n "$SURPRISE" ] && [ "$SURPRISE" != "[]" ]; then
@@ -838,62 +468,20 @@ if [ -n "${FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS:-}" ]; then
     FULL_YEAR_NON_GAAP_NI_DOLLARS=$(millions_to_dollars "$FULL_YEAR_NON_GAAP_NET_INCOME_MILLIONS")
 fi
 
-# Candidate 1: earnings-release RPO (usually millions)
-if [[ "${RPO_MILLIONS:-}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-    CANDIDATE_RPO_DOLLARS=$(millions_to_dollars "$RPO_MILLIONS")
-    CANDIDATE_RPO_MILLIONS="$RPO_MILLIONS"
-    CANDIDATE_RPO_YOY="${RPO_YOY_PCT:-N/A}"
-    CANDIDATE_RPO_COVERAGE="N/A"
-    CANDIDATE_RPO_STATUS="present_unchecked"
-    if [[ "$CANDIDATE_RPO_DOLLARS" =~ ^-?[0-9]+$ ]] && [[ "$CURR_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_REV > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
-        CANDIDATE_RPO_COVERAGE=$(awk -v rpo="$CANDIDATE_RPO_DOLLARS" -v rev="$CURR_REV" 'BEGIN { printf "%.4f", rpo / rev }')
-        CANDIDATE_RPO_STATUS="valid"
-        if [ "$SECTOR_TYPE" = "TECH" ] && [ "$(echo "$CANDIDATE_RPO_COVERAGE < 0.01" | bc 2>/dev/null || echo 0)" = "1" ]; then
-            CANDIDATE_RPO_STATUS="suspect_too_small_vs_revenue"
+# RPO from SEC EDGAR (set in overlay from _edgar.json). SEC_RPO is in dollars.
+if [[ "${SEC_RPO:-}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    RPO_DOLLARS=$(awk -v n="$SEC_RPO" 'BEGIN { printf "%.0f", n }')
+    RPO_MILLIONS=$(format_millions "$SEC_RPO")
+    RPO_SOURCE="sec_edgar"
+    RPO_QUALITY_STATUS="present_unchecked"
+    if [[ "$CURR_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_REV > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
+        RPO_COVERAGE_RATIO=$(awk -v rpo="$RPO_DOLLARS" -v rev="$CURR_REV" 'BEGIN { printf "%.4f", rpo / rev }')
+        RPO_QUALITY_STATUS="valid"
+        if [ "$SECTOR_TYPE" = "TECH" ] && [ "$(echo "$RPO_COVERAGE_RATIO < 0.01" | bc 2>/dev/null || echo 0)" = "1" ]; then
+            RPO_QUALITY_STATUS="suspect_too_small_vs_revenue"
         fi
     fi
-    if [ "$CANDIDATE_RPO_STATUS" = "valid" ] || [ "$CANDIDATE_RPO_STATUS" = "present_unchecked" ]; then
-        RPO_DOLLARS="$CANDIDATE_RPO_DOLLARS"
-        RPO_COVERAGE_RATIO="$CANDIDATE_RPO_COVERAGE"
-        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
-        RPO_SOURCE="earnings_release"
-    else
-        RPO_MILLIONS="N/A"
-        RPO_YOY_PCT="N/A"
-        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
-        log_trace "WARN" "fetch_data" "earnings-release RPO rejected as implausibly small vs revenue"
-    fi
-fi
-
-# Candidate 2: SEC companyfacts RPO fallback if earnings-release RPO was missing or rejected.
-if [[ ("$RPO_QUALITY_STATUS" = "missing" || "$RPO_QUALITY_STATUS" = "suspect_too_small_vs_revenue") && "${SEC_RPO:-}" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
-    CANDIDATE_RPO_DOLLARS=$(awk -v n="$SEC_RPO" 'BEGIN { printf "%.0f", n }')
-    CANDIDATE_RPO_MILLIONS=$(format_millions "$SEC_RPO")
-    CANDIDATE_RPO_COVERAGE="N/A"
-    CANDIDATE_RPO_STATUS="present_unchecked"
-    if [[ "$CANDIDATE_RPO_DOLLARS" =~ ^-?[0-9]+$ ]] && [[ "$CURR_REV" =~ ^-?[0-9]+(\.[0-9]+)?$ ]] && [ "$(echo "$CURR_REV > 0" | bc 2>/dev/null || echo 0)" = "1" ]; then
-        CANDIDATE_RPO_COVERAGE=$(awk -v rpo="$CANDIDATE_RPO_DOLLARS" -v rev="$CURR_REV" 'BEGIN { printf "%.4f", rpo / rev }')
-        CANDIDATE_RPO_STATUS="valid"
-        if [ "$SECTOR_TYPE" = "TECH" ] && [ "$(echo "$CANDIDATE_RPO_COVERAGE < 0.01" | bc 2>/dev/null || echo 0)" = "1" ]; then
-            CANDIDATE_RPO_STATUS="suspect_too_small_vs_revenue"
-        fi
-    fi
-    if [ "$CANDIDATE_RPO_STATUS" = "valid" ] || [ "$CANDIDATE_RPO_STATUS" = "present_unchecked" ]; then
-        RPO_DOLLARS="$CANDIDATE_RPO_DOLLARS"
-        RPO_MILLIONS="$CANDIDATE_RPO_MILLIONS"
-        RPO_YOY_PCT="N/A"
-        RPO_COVERAGE_RATIO="$CANDIDATE_RPO_COVERAGE"
-        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
-        RPO_SOURCE="sec_companyfacts"
-        log_trace "INFO" "fetch_data" "RPO fallback accepted from SEC companyfacts"
-    else
-        RPO_DOLLARS="N/A"
-        RPO_MILLIONS="N/A"
-        RPO_YOY_PCT="N/A"
-        RPO_COVERAGE_RATIO="N/A"
-        RPO_QUALITY_STATUS="$CANDIDATE_RPO_STATUS"
-        log_trace "WARN" "fetch_data" "SEC RPO rejected as implausibly small vs revenue"
-    fi
+    log_trace "INFO" "fetch_data" "RPO from SEC EDGAR"
 fi
 
 # Momentum-adjusted valuation anchors: use forward EPS guidance and analyst high target, not just mean target.
@@ -1038,10 +626,16 @@ esac
 echo "$SECTOR_DATA" | jq -e . >/dev/null 2>&1 || SECTOR_DATA="{}"
 
 # ============================================
-# Step 4: Final JSON Compilation (with quarterly_trend, inflection flags, sector_context)
+# Step 4: Final JSON Compilation (with quarterly_trend, sector_context, nested edgar)
 # ============================================
+# Nest full EDGAR payload under .edgar (single-file output; _edgar.json removed after)
+EDGAR_OBJ="null"
+[ -f "$EDGAR_JSON" ] && jq -e '.ticker' "$EDGAR_JSON" >/dev/null 2>&1 && EDGAR_OBJ=$(jq -c . "$EDGAR_JSON" 2>/dev/null) || true
+[ -z "$EDGAR_OBJ" ] && EDGAR_OBJ="null"
+
 echo "💾 Compiling Unified Dataset..."
 jq -n \
+    --argjson edgar "$EDGAR_OBJ" \
     --arg ticker "$TICKER_UPPER" \
     --arg desc "$DESC" \
     --arg rev "$REV" \
@@ -1101,10 +695,12 @@ jq -n \
     --arg sector "$SECTOR" \
     --arg sector_type "$SECTOR_TYPE" \
     --argjson sector_data "$SECTOR_DATA" \
+    --arg earnings_url "${EARNINGS_URL:-}" \
     '{
         ticker: $ticker,
         timestamp: (now | strftime("%Y-%m-%dT%H:%M:%SZ")),
         company_profile: { name: $ticker, description: $desc },
+        earnings_url: (if $earnings_url != "" then $earnings_url else null end),
         sector_context: { sector: $sector, category: $sector_type, power_metrics: $sector_data },
         financial_metrics: { 
             revenue: $rev, 
@@ -1165,12 +761,16 @@ jq -n \
             institutional_ownership_pct: $institutional_ownership_pct,
             institutions_count: $institutions_count
         },
-        momentum: { earnings_surprises: $surprise }
+        momentum: { earnings_surprises: $surprise },
+        edgar: $edgar
     }' > "$DATA_FILE"
 
-# Cleanup (set FETCH_KEEP_YAHOO=1 to keep Yahoo summary for debugging ROIC/balance sheet)
+# Remove standalone EDGAR file; data is now nested under .edgar in _data.json
+rm -f "$EDGAR_JSON"
+
+# Cleanup (set FETCH_KEEP_YAHOO=1 to keep Yahoo summary for debugging)
 if [ "${FETCH_KEEP_YAHOO:-0}" != "1" ]; then
-    rm -f "$SEC_FILE" "${Y_RAW}_quote" "${Y_RAW}_summary" "$COOKIE_FILE"
+    rm -f "${Y_RAW}_quote" "${Y_RAW}_summary" "$COOKIE_FILE"
 fi
 log_trace "INFO" "fetch_data" "Complete | $DATA_FILE"
 echo "✅ Data ready: $DATA_FILE"

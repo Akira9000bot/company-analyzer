@@ -54,11 +54,17 @@ fi
 get_relevant_context() {
     case "$FW_ID" in
         "07-business")
-            # Inject profile, financial metrics, and sector_context for business evaluation
-            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
+            # Inject profile, financial metrics, sector_context, earnings_url, nested edgar for business evaluation
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, sector_context: (.sector_context // {}), earnings_url: (.earnings_url // null), edgar: (.edgar // null)}' "$DATA_FILE" ;;
         "03-ai-moat") 
-            # Inject ROE, valuation, and Earnings Surprises for Moat inference
-            jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description}' "$DATA_FILE" ;;
+            # Inject momentum, valuation, description, sector_context for AI moat inference
+            jq -c '{momentum: .momentum, valuation: .valuation, description: .company_profile.description, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
+        "04-strategic-moat")
+            # Moat and counter-positioning: profile, metrics, valuation, momentum, sector_context, earnings_url
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum, sector_context: (.sector_context // {}), earnings_url: (.earnings_url // null)}' "$DATA_FILE" ;;
+        "06-growth")
+            # Growth drivers: profile, metrics, valuation, momentum, sector_context, earnings_url
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum, sector_context: (.sector_context // {}), earnings_url: (.earnings_url // null)}' "$DATA_FILE" ;;
         "08-risk") 
             # Inject valuation and momentum for Risk analysis
             jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile}' "$DATA_FILE" ;;
@@ -66,8 +72,8 @@ get_relevant_context() {
             # Valuation now uses momentum-adjusted anchors and institutional ownership context
             jq -c '{valuation: .valuation, momentum: .momentum, profile: .company_profile, metrics: {margin_inflection: .financial_metrics.margin_inflection, revenue_q_yoy: .financial_metrics.revenue_q_yoy, latest_q_gaap_gross_margin_pct: .financial_metrics.latest_q_gaap_gross_margin_pct, latest_q_non_gaap_gross_margin_pct: .financial_metrics.latest_q_non_gaap_gross_margin_pct}}' "$DATA_FILE" ;;
         "01-phase")
-            # Enriched context for lifecycle phase: profile + financial_metrics + valuation + momentum + sector_context
-            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
+            # Enriched context for lifecycle phase: profile + metrics + valuation + momentum + sector_context + earnings_url + nested edgar
+            jq -c '{profile: .company_profile, metrics: .financial_metrics, valuation: .valuation, momentum: .momentum, sector_context: (.sector_context // {}), earnings_url: (.earnings_url // null), edgar: (.edgar // null)}' "$DATA_FILE" ;;
         "02-metrics") 
             # Core financial metrics + sector_context (power metrics by sector)
             jq -c '{metrics: .financial_metrics, valuation: .valuation, sector_context: (.sector_context // {})}' "$DATA_FILE" ;;
