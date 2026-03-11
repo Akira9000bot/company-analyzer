@@ -39,4 +39,13 @@ Use: [Exact valuation method(s) from Strategic Mapping for this phase.]
 Avoid: [Exact valuation method from Strategic Mapping for this phase.]
 
 ---
-NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid). Your last line must start with "Avoid:" so the response is complete; do not stop generating before that line. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (your assessment of lifecycle strength, 0=decline, 100=strong growth stage).
+NO intro paragraph. NO citations. Use only the section headers above (PHASE:, EVIDENCE:, STRATEGY:). Replace the bracketed placeholders with your analysis; keep the numbering under EVIDENCE. Before finishing, ensure you have written PHASE, all three EVIDENCE lines, and STRATEGY (Use + Avoid). Your last line must start with "Avoid:" so the response is complete; do not stop generating before that line. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100].
+
+SCORING RUBRIC (use this to set FRAMEWORK_SCORE; score = lifecycle investment quality for the weighted verdict; do not default to 85):
+- Phase 6 Decline: 0–35 (worse decline = lower; e.g. revenue -20% and falling FCF → low 20s).
+- Phase 1 Startup: 38–50 (early stage, high growth but negative FCF and dilution; stronger evidence = high 40s).
+- Phase 2 Hyper-Growth: 51–70 (losses shrinking, growth >15%; exceptional growth + path to profit = high 60s; do not score Phase 2 in the 70s).
+- Phase 3 Self-Funding: 65–78 (positive FCF, growth >10%; stronger margins and stability = mid–high 70s).
+- Phase 4 Op-Leverage: 75–90 (op profit growing faster than revenue; exceptional execution = mid–high 80s; e.g. NVDA → 88–90; cap Phase 4 at 90).
+- Phase 5 Capital-Return: 80–95 (slow growth, high FCF, buybacks/dividends; strong capital return = high 80s–low 90s; best-in-class mature = 92–95).
+Pick one integer within the band that matches the stated PHASE and the strength of EVIDENCE. Phase 2 must be strictly below Phase 3/4/5; Phase 4 and Phase 5 must differ when evidence strength differs (e.g. weak Phase 4 → 75–78; strong Phase 5 → 90–95).
