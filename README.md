@@ -1,12 +1,41 @@
 # Company Analyzer 🛡️
 
-A high-performance, cost-optimized strategic research engine that analyzes public companies using SEC filings and your **OpenClaw-configured LLM**. It implements a structured, 8-stage sequential pipeline to evaluate business phases, moats, and execution risks for long-term investment conviction. 
+A high-performance, cost-optimized strategic research engine that analyzes public companies using SEC filings and your **OpenClaw-configured LLM**. It implements a structured, 8-stage pipeline to evaluate business phases, moats, and execution risks for long-term investment conviction.
+
+---
+
+## 📋 Two pipeline flows
+
+You can run the 8 frameworks in two ways. Both produce `assets/outputs/<TICKER>_01-phase.md` through `<TICKER>_08-risk.md`; they differ in how `FINAL_REPORT.md` is built.
+
+| Flow | Script | `FINAL_REPORT.md` | Use when |
+|------|--------|-------------------|----------|
+| **Synthesis** | `analyze.sh` | One LLM synthesis step: VERDICT (BUY/HOLD/SELL), VALUATION ANCHORS, WEIGHTED SCORECARD, NARRATIVE FLIP RADAR, STRUCTURAL FLAGS, KEY RISKS, INVESTMENT THESIS, ADJUSTMENTS. | You want a single verdict and actionable summary (e.g. `/analyze` from Telegram or CLI). |
+| **Dossier** | `analyze-pipeline.sh` | Concatenation of all 8 framework outputs into one file (Strategic Research Dossier with ## PHASE, ## METRICS, ## RISK, etc.). No extra LLM call. | You want the full text of every framework in one place for audit or deep dive. |
+
+**Examples**
+
+```bash
+# From the skill directory (e.g. ~/.openclaw/workspace/skills/company-analyzer)
+
+# Synthesis report (default for /analyze) — verdict + summary
+./scripts/analyze.sh AAPL --live
+# → assets/outputs/AAPL_FINAL_REPORT.md = VERDICT, VALUATION ANCHORS, WEIGHTED SCORECARD, etc.
+
+# Dossier — all framework sections in one file
+./scripts/analyze-pipeline.sh TXN --live
+# → assets/outputs/TXN_FINAL_REPORT.md = Strategic Research Dossier (01-phase through 08-risk)
+
+# Single framework only (no FINAL_REPORT)
+./scripts/run-single-step.sh KVYO 02-metrics
+# → assets/outputs/KVYO_02-metrics.md only (use ticker KVYO for Klaviyo)
+```
 
 ---
 
 ## 🏗️ Architecture & Pipeline
 
-The system follows a **Sequential Pipeline** model, ensuring that each analysis framework builds upon a consistent logical foundation while preventing API rate-limit bursts. 
+The system runs 8 frameworks; the **synthesis** flow (analyze.sh) runs all 8 frameworks sequentially, then one synthesis LLM call (sequential avoids provider rate limits and context overflow when run via bot). The **dossier** flow (analyze-pipeline.sh) runs all 8 sequentially and concatenates their outputs.
 
 1. **Data Layer (`fetch_data.sh`)**: Ingests financial data from **Yahoo Finance** (quote + quoteSummary), **SEC EDGAR** (company facts for revenue, net income, FCF, and share count trend), and **Alpha Vantage** (fallback for FCF, quarterly revenue YoY, and shares when Yahoo/SEC leave them N/A). Configure the Alpha Vantage profile in OpenClaw auth profiles to enable the fallback. 
 
@@ -52,7 +81,7 @@ The system follows a **Sequential Pipeline** model, ensuring that each analysis 
 * **Dynamic API Client**: Configuration-driven rate limiting (from OpenClaw config; default 250 RPM) and retries on transient API errors (e.g. 503). 
 
 
-* **Zero-Cost Synthesis**: Automatically compiles individual framework reports into a single, cohesive "Final Research Dossier" without additional LLM fees. 
+* **Two report modes**: **Synthesis** (analyze.sh) — one LLM synthesis step for VERDICT and summary. **Dossier** (analyze-pipeline.sh) — concatenates all 8 framework outputs into one file with no extra LLM call. 
 
 
 * **Persistent Caching**: Uses a caching layer under the skill (`.cache/llm-responses/`); falls back to `~/.openclaw/cache/company-analyzer/llm-responses/` if the skill directory is read-only. Metadata tracks tokens and model. 
@@ -81,16 +110,30 @@ chmod +x ~/.openclaw/workspace/skills/company-analyzer/scripts/*.sh
 
 ### Usage
 
-Run the full sequential pipeline for a ticker (from the skill directory):
+From the skill directory (e.g. `cd ~/.openclaw/workspace/skills/company-analyzer`):
+
+**Synthesis report** (verdict + summary; use for `/analyze` or when you want BUY/HOLD/SELL and anchors):
 
 ```bash
-cd skills/company-analyzer && ./scripts/analyze-pipeline.sh [TICKER] --live
+./scripts/analyze.sh AAPL --live
 ```
 
-Run a single framework only (e.g. 01-phase or 02-metrics):
+**Dossier report** (all 8 framework sections in one file; no synthesis LLM):
 
 ```bash
-cd skills/company-analyzer && ./scripts/run-single-step.sh [TICKER] [FW_ID]
+./scripts/analyze-pipeline.sh TXN --live
+```
+
+**Single framework only** (e.g. 01-phase or 02-metrics; no FINAL_REPORT):
+
+```bash
+./scripts/run-single-step.sh KVYO 02-metrics
+```
+
+**Dry run** (no API calls):
+
+```bash
+./scripts/analyze.sh TEAM
 ```
 
 ### Monitoring

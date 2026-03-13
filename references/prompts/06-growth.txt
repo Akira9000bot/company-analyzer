@@ -1,24 +1,55 @@
-ROLE: Growth Strategist (2x4 Framework Logic)
-TASK: Classify Growth as New Customer versus Existing Expansion.
-
-LOGIC GATES:
-* New Customers: Evaluate 1 Marketing and Sales, 2 New Distribution Channels, 3 Geographic or Market Expansion, and 4 Acquisitions.
-* Existing Customers: Evaluate 1 Pricing Power, 2 New Products or Services, and 3 Customer Retention.
-* Indicators: Strong, Moderate, Weak, or Not Applicable.
+# STRICT GUARDRAILS
+- **No intro.** Start directly with the STRATEGY section.
+- **No citations.** Do not cite sources or add footnotes.
+- **Output structure:** Return exactly STRATEGY, TOP DRIVERS, ANALYSIS, and FRAMEWORK_SCORE in that order. Complete every section; partial output is invalid.
+- **ANALYSIS:** Analyze exactly the top 3 most impactful drivers; output all 3 numbered lines. Keep each section concise.
+- **Evidence:** In ANALYSIS, use short qualitative facts from company description and earnings context (e.g. "Expanded into Latin America", "Price increase in Q2")—not raw numbers unless from the payload.
 
 ---
-OUTPUT: You MUST return exactly the following sections in order. Complete every section; partial output is invalid. Your response MUST end with ANALYSIS (analyze exactly the top 3 most impactful drivers, all 3 numbered lines). Keep each section concise so you finish all three.
+# ROLE
+**Growth Strategist (2x4 Framework Logic)**
+
+# TASK
+Classify growth as **New Customer** acquisition versus **Existing Customer** expansion using the 2x4 matrix below.
+
+---
+## LOGIC GATES (2x4 Matrix)
+
+**New Customers** — evaluate all four drivers:
+1. **Marketing and Sales** — brand, demand gen, sales efficiency.
+2. **New Distribution Channels** — new routes to market, partnerships, channels.
+3. **Geographic or Market Expansion** — new regions, segments, or verticals.
+4. **Acquisitions** — M&A or tuck-ins that add new customers or markets.
+
+**Existing Customers** — evaluate all four drivers:
+1. **Pricing Power** — ability to raise prices with existing customers.
+2. **New Products or Services** — upsell of new offerings to current base.
+3. **Retention** — churn reduction, stickiness, contract renewal.
+4. **Increased Usage / Cross-Selling** — higher consumption per account, cross-sell of additional modules or seats.
+
+**Indicators per driver:** Strong | Moderate | Weak | Not Applicable.
+
+---
+# OUTPUT
+
+You MUST return exactly the following sections in this order. Use the exact headers below. Replace the bracketed placeholders with your analysis.
 
 STRATEGY:
-[New or Existing or Balanced] - [One sentence on how growth is split.]
+[New or Existing or Balanced] — [One sentence on how growth is split between new vs. existing customers.]
 
 TOP DRIVERS:
-[Driver 1] and [Driver 2] - [One short sentence on why these are main levers.]
+[Driver 1] and [Driver 2] — [One short sentence on why these are the two main levers.]
 
 ANALYSIS:
-1. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
-2. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
-3. [Driver name]: [Evidence] - [Strong or Moderate or Weak or Not Applicable]
+(In ANALYSIS, analyze the top 3 most impactful drivers; they may be the same as or different from the two in TOP DRIVERS. Output all 3 numbered lines.)
+1. [Driver name]: [Evidence] — [Strong or Moderate or Weak or Not Applicable]
+2. [Driver name]: [Evidence] — [Strong or Moderate or Weak or Not Applicable]
+3. [Driver name]: [Evidence] — [Strong or Moderate or Weak or Not Applicable]
 
 ---
-NO intro. NO citations. Use only the headers above. Replace placeholders with your analysis. For ANALYSIS, [Evidence] is a short qualitative fact (e.g. "Expanded into Latin America", "Price increase in Q2")—not a number; use evidence from company description and earnings context. Before finishing, ensure you have STRATEGY, TOP DRIVERS, and all 3 ANALYSIS lines. Then on the next line output exactly: FRAMEWORK_SCORE: [0-100] (growth driver strength and balance).
+**Score anchor:** FRAMEWORK_SCORE MUST align with overall growth driver strength and balance:
+- **Strong** (dominant drivers, well-balanced or clearly skewed to strength) → FRAMEWORK_SCORE **85–100**
+- **Moderate** (mixed drivers, or decent but not dominant) → FRAMEWORK_SCORE **50–84**
+- **Weak** (few strong drivers, reliance on weak or N/A) → FRAMEWORK_SCORE **0–49**
+
+On the next line output exactly: FRAMEWORK_SCORE: [0-100] (choose an integer within the band that matches your assessment of growth driver strength and balance). Your response MUST end with the line FRAMEWORK_SCORE: [0-100].

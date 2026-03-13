@@ -3,11 +3,21 @@ name: company-analyzer
 description: Investment research and company analysis using 8 specialized frameworks. Use when the user wants to analyze a public company for investment purposes, research competitive positioning, evaluate AI moats, assess business models, or generate investment theses. Trigger on commands like "/analyze", requests to analyze tickers like "AAPL", "analyze company X", or any investment research queries.
 ---
 
+# MANDATORY: /analyze uses analyze.sh only
+
+When the user sends **/analyze &lt;TICKER&gt;** (e.g. /analyze ADBE), you **MUST** run **analyze.sh**—never analyze-pipeline.sh. analyze.sh produces the synthesis report (VERDICT, VALUATION ANCHORS, WEIGHTED SCORECARD). analyze-pipeline.sh produces a dossier (concatenated framework sections) and is only for when the user explicitly asks for the "dossier" or "full framework output in one file."
+
+**Exact command for /analyze:**
+```bash
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
+```
+Example: `/analyze ADBE` → `cd skills/company-analyzer && ./scripts/analyze.sh ADBE --live`
+
 # CRITICAL: Execution Method
 
-**Full pipeline** (all 8 frameworks + synthesis): when user asks to "analyze &lt;TICKER&gt;" or "run full analysis" (no "only" one step):
+**Full pipeline** (all 8 frameworks + synthesis): when user asks to "analyze &lt;TICKER&gt;" or "run full analysis" (no "only" one step), use **analyze.sh** so the final report is the synthesis output (VERDICT, VALUATION ANCHORS, WEIGHTED SCORECARD, etc.). Do NOT use analyze-pipeline.sh for /analyze—it produces a different (dossier) format.
 ```bash
-cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live
+cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live
 ```
 
 **Single step only** (e.g. "only 02-metrics" or "only produce 01-phase"): do NOT use --live. Run:
@@ -62,9 +72,9 @@ cd skills/company-analyzer && ./scripts/analyze.sh <TICKER>
 ### Full Analysis (via Telegram/command)
 User types: `/analyze AAPL`
 
-You execute: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh AAPL --live`
+You execute: `cd skills/company-analyzer && ./scripts/analyze.sh AAPL --live`
 
-Runs all 8 frameworks in parallel. Cost: ~$0.03 (or $0 if cached).
+Runs 8 frameworks sequentially then synthesis (sequential avoids provider rate limits and context overflow when run via bot/agent). FINAL_REPORT.md = synthesis output (VERDICT, VALUATION ANCHORS, etc.). Cost: ~$0.03 (or $0 if cached).
 
 ### Data Fetching
 Before analysis, fetch company data:
@@ -91,10 +101,33 @@ Valid `FW_ID` values: `01-phase`, `02-metrics`, `03-ai-moat`, `04-strategic-moat
 
 Output is written to `assets/outputs/<TICKER>_<FW_ID>.md` (e.g. `KVYO_02-metrics.md`). Wait for the script to finish before reading that file. Use ticker **KVYO** for Klaviyo (not KYVO).
 
+## Two pipeline flows
+
+| Flow | Script | Output `FINAL_REPORT.md` | When to use |
+|------|--------|--------------------------|--------------|
+| **Synthesis** | `analyze.sh` | LLM synthesis: VERDICT, VALUATION ANCHORS, WEIGHTED SCORECARD, NARRATIVE FLIP RADAR, STRUCTURAL FLAGS, KEY RISKS, INVESTMENT THESIS, ADJUSTMENTS. | Default for `/analyze <TICKER>`, Telegram, or when you want a single verdict and actionable summary. |
+| **Dossier** | `analyze-pipeline.sh` | Concatenated framework outputs: header + framework weights, then each of the 8 framework `.md` sections (01-phase through 08-risk) in one file. No synthesis LLM call. | When you want all framework text in one place for audit, deep dive, or sharing. |
+
+**Examples**
+
+- Synthesis (verdict + summary):  
+  `cd skills/company-analyzer && ./scripts/analyze.sh AAPL --live`  
+  → `assets/outputs/AAPL_FINAL_REPORT.md` = BUY/HOLD/SELL, anchors, scorecard, thesis.
+
+- Dossier (full framework text):  
+  `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh AAPL --live`  
+  → `assets/outputs/AAPL_FINAL_REPORT.md` = Strategic Research Dossier with ## PHASE, ## METRICS, ## RISK, etc.  
+  Use when the user asks for the "dossier", "full framework output", "all frameworks in one file", or "concatenated report".
+
+- Single framework (no report):  
+  `cd skills/company-analyzer && ./scripts/run-single-step.sh KVYO 02-metrics`  
+  → `assets/outputs/KVYO_02-metrics.md` only.
+
 ## Architecture
 
 ### Scripts
-- **`analyze-parallel.sh`** - Main orchestrator (parallel execution)
+- **`analyze.sh`** - Synthesis flow: runs 8 frameworks sequentially then **09-synthesis** LLM; writes synthesis output to `FINAL_REPORT.md`. Use for `/analyze <TICKER>`.
+- **`analyze-pipeline.sh`** - Dossier flow: runs 8 frameworks sequentially and writes a **concatenated dossier** to `FINAL_REPORT.md`. Use when you need the full framework text in one file.
 - **`run-framework.sh`** - Single framework runner with caching; validates output for required end-markers (does not cache truncated responses; re-run step to get a fresh response)
 - **`fetch_data.sh`** - Data acquisition (SEC + Alpha Vantage)
 - **`lib/cache.sh`** - Response caching utilities
@@ -140,9 +173,8 @@ Model and API key are read from OpenClaw config (primary model and `{provider}:d
 ## Output
 
 All analyses saved to `assets/outputs/`:
-- `TICKER_01-phase.md` through `TICKER_08-risk.md`
-
-*(Synthesis phase removed for cost efficiency)*
+- `TICKER_01-phase.md` through `TICKER_08-risk.md` (always)
+- `TICKER_FINAL_REPORT.md` — **Synthesis flow** (analyze.sh): verdict, anchors, scorecard, thesis. **Dossier flow** (analyze-pipeline.sh): concatenated framework sections in one file.
 
 ## Performance
 
@@ -169,7 +201,10 @@ All analyses saved to `assets/outputs/`:
 
 **"Analysis failed (code 1)" / Heartbeat alert after 01-phase or 02-metrics:**
 - Often **HTTP 503** (Service Unavailable) or **billing/quota (402, 403)**. The pipeline continues after a failed step and still builds a partial report.
-- **Fix:** For 503, re-run later. For billing, top up or switch key (see above). Run from the skill directory: `cd skills/company-analyzer && ./scripts/analyze-pipeline.sh <TICKER> --live`.
+- **Fix:** For 503, re-run later. For billing, top up or switch key (see above). Run from the skill directory: `cd skills/company-analyzer && ./scripts/analyze.sh <TICKER> --live`.
 
 **Framework failures:**
 - Failed steps are listed at the end; partial outputs remain in `assets/outputs/`. Check `assets/traces/<TICKER>_<date>.trace` for which step failed and why.
+
+**"Pipeline timeout" / "Frameworks X and Y did not complete":**
+- The pipeline runs all 8 frameworks **sequentially** to avoid provider rate limits (e.g. Google cooldown) and context overflow when run via Telegram/bot. Each framework step has a **120s timeout** (override with `FW_TIMEOUT_SEC=180` if your API is slow). If a step times out or fails, the rest still run and synthesis uses whatever completed. To give the run more time, increase the timeout: `FW_TIMEOUT_SEC=180 ./scripts/analyze.sh VSAT --live`.

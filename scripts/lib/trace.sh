@@ -2,10 +2,15 @@
 #
 # lib/trace.sh - Trace logging for company-analyzer
 # All traces live under assets/traces/ as <TICKER>_<date>.trace
+# Use SKILL_DIR if set (e.g. by analyze.sh) so traces always go to the skill dir regardless of cwd.
 #
 
 TRACE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TRACE_DIR="$(dirname "$TRACE_LIB_DIR")/../assets/traces"
+if [ -n "${SKILL_DIR:-}" ] && [ -d "$SKILL_DIR" ]; then
+    TRACE_DIR="$SKILL_DIR/assets/traces"
+else
+    TRACE_DIR="$(cd "$(dirname "$TRACE_LIB_DIR")/../assets/traces" && pwd)"
+fi
 
 # Ensure trace directory exists
 init_trace() {

@@ -1,10 +1,10 @@
 {
-  "01-phase": 0.20,
+  "01-phase": 0,
   "02-metrics": 0.20,
   "08-risk": 0.20,
-  "03-ai-moat": 0.125,
-  "04-strategic-moat": 0.125,
+  "03-ai-moat": 0.15,
+  "04-strategic-moat": 0.15,
   "05-sentiment": 0,
-  "06-growth": 0.075,
-  "07-business": 0.075
+  "06-growth": 0.15,
+  "07-business": 0.15
 }

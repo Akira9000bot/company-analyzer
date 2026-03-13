@@ -26,6 +26,7 @@ fi
 TICKER_UPPER=$(echo "$TICKER" | tr '[:lower:]' '[:upper:]')
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DIR="$(dirname "$SCRIPT_DIR")"
+export SKILL_DIR
 OUTPUTS_DIR="$SKILL_DIR/assets/outputs"
 PROMPTS_DIR="$SKILL_DIR/references/prompts"
 
@@ -56,25 +57,35 @@ if [ ! -f "$DATA_FILE" ] || [ -n "$REFRESH" ]; then
 fi
 [ ! -f "$DATA_FILE" ] && { echo "ERROR: No data file after fetch: $DATA_FILE" >&2; exit 1; }
 
-# 2. Run 8 Frameworks (same order as analyze-pipeline.sh for consistent context hand-off)
+# 2. Run 8 Frameworks sequentially (avoids provider rate limits and context overflow when run via bot/agent)
 FW_SEQUENCE=(01-phase 02-metrics 07-business 03-ai-moat 04-strategic-moat 06-growth 05-sentiment 08-risk)
-echo "📋 Phase 1: Analyzing 8 Frameworks..."
+# Per-framework timeout so one slow/hung call doesn't block the rest; synthesis still runs with whatever completed
+FW_TIMEOUT_SEC="${FW_TIMEOUT_SEC:-120}"
+echo "📋 Phase 1: Analyzing 8 Frameworks (sequential; timeout ${FW_TIMEOUT_SEC}s per step)..."
 ROLLING_CONTEXT_FILE="$OUTPUTS_DIR/${TICKER_UPPER}_rolling_context.txt"
 rm -f "$ROLLING_CONTEXT_FILE"
 
 export SUMMARY_CONTEXT="None"
+FAILED_FRAMEWORKS=()
 
 for fw_id in "${FW_SEQUENCE[@]}"; do
     echo -n "  🔄 $fw_id... "
-    "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPTS_DIR/$fw_id.txt" "$OUTPUTS_DIR" > /dev/null
-    
-    # Update SUMMARY_CONTEXT for next framework (Tail -n 3 to keep it small)
-    if [ -f "$ROLLING_CONTEXT_FILE" ]; then
-        SUMMARY_CONTEXT=$(tail -n 3 "$ROLLING_CONTEXT_FILE")
-        export SUMMARY_CONTEXT
+    if timeout "$FW_TIMEOUT_SEC" "$SCRIPT_DIR/run-framework.sh" "$TICKER_UPPER" "$fw_id" "$PROMPTS_DIR/$fw_id.txt" "$OUTPUTS_DIR" > /dev/null 2>&1; then
+        if [ -f "$ROLLING_CONTEXT_FILE" ]; then
+            SUMMARY_CONTEXT=$(tail -n 3 "$ROLLING_CONTEXT_FILE")
+            export SUMMARY_CONTEXT
+        fi
+        echo "✅"
+    else
+        echo "⚠️ timeout or failed"
+        FAILED_FRAMEWORKS+=("$fw_id")
     fi
-    echo "✅"
 done
+
+if [ ${#FAILED_FRAMEWORKS[@]} -gt 0 ]; then
+    echo ""
+    echo "⚠️ Note: ${#FAILED_FRAMEWORKS[@]} framework(s) did not complete: ${FAILED_FRAMEWORKS[*]}. Synthesis will use the rest."
+fi
 
 # 3. Strategic Synthesis
 echo ""
@@ -99,7 +110,7 @@ SYNTHESIS_PROMPT=$(cat "$SYNTH_FILE_PROMPT")
 WEIGHTS_FILE="$(dirname "$PROMPTS_DIR")/framework-weights.json"
 REFERENCE_DATE=$(date -u +%Y-%m-%d)
 
-# Compute BASE_SCORE from the 7 scored frameworks (exclude 05-sentiment)
+# Compute BASE_SCORE from frameworks with non-zero weight (01-phase and 05-sentiment excluded; 6 frameworks)
 BASE_SCORE_VAL=""
 if [ -f "$WEIGHTS_FILE" ]; then
     WEIGHTED_SUM="0"
